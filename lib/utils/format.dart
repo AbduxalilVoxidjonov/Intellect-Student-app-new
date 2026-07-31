@@ -10,13 +10,15 @@ const _weekdays = [
   'Dushanba', 'Seshanba', 'Chorshanba', 'Payshanba', 'Juma', 'Shanba', 'Yakshanba',
 ];
 
-/// Bahoga qarab rang (>=4.5 yashil, >=3.5 ko'k, >=2.5 sariq, past qizil).
+/// Bahoga qarab rang — baho qancha yuqori bo'lsa, yashil shuncha to'q.
 Color gradeColor(num g) {
-  final v = g.toDouble();
-  if (v >= 4.5) return const Color(0xFF16A34A);
-  if (v >= 3.5) return const Color(0xFF2563EB);
-  if (v >= 2.5) return const Color(0xFFF59E0B);
-  return const Color(0xFFEF4444);
+  // Web `gradeHex` bilan aynan bir xil: bitta emerald shkala, indeks = round(baho) − 1.
+  const steps = [
+    Color(0xFF10B981), Color(0xFF059669), Color(0xFF047857),
+    Color(0xFF065F46), Color(0xFF064E3B),
+  ];
+  final i = (g.toDouble().round() - 1).clamp(0, 4);
+  return steps[i];
 }
 
 const _subjPalette = [

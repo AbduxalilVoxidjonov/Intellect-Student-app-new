@@ -41,7 +41,7 @@ class _GradesScreenState extends State<GradesScreen> {
 
   Widget _body(BuildContext context) {
     if (_error != null) {
-      return Center(child: EmptyState(icon: Icons.error_outline, text: _error!));
+      return Center(child: EmptyState(icon: Icons.error_outline, text: "Yuklab bo'lmadi.\n$_error"));
     }
     final report = _report;
     if (report == null) return const Loader();
@@ -75,7 +75,7 @@ class _GradesScreenState extends State<GradesScreen> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(avg.toStringAsFixed(2),
-                        style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800, color: gradeColor(avg))),
+                        style: TextStyle(fontSize: 27, fontWeight: FontWeight.w800, color: gradeColor(avg))),
                     Text("o'rtacha", style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, color: c.muted)),
                   ],
                 ),
@@ -86,7 +86,7 @@ class _GradesScreenState extends State<GradesScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     _statRow(c, Icons.emoji_events_outlined, c.green, c.greenSoft, '$fives ta', '"5" baho'),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 10),
                     _statRow(c, Icons.menu_book_outlined, c.accent, c.accentSoft, '${vals.length} ta', 'fan'),
                   ],
                 ),
@@ -124,7 +124,7 @@ class _GradesScreenState extends State<GradesScreen> {
           alignment: Alignment.center,
           child: Icon(icon, size: 18, color: color),
         ),
-        const SizedBox(width: 10),
+        const SizedBox(width: 8),
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -158,7 +158,7 @@ class _GradesScreenState extends State<GradesScreen> {
             child: Text(s.name, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: c.text)),
           ),
           if (grade != null)
-            GradeBox(grade, size: 36)
+            GradeBox(grade, size: 36, radius: 36 * 0.32, fontSize: 36 * 0.5)
           else
             Text('–', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: c.faint)),
         ],

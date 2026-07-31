@@ -14,7 +14,6 @@ class GradingScreen extends StatefulWidget {
 
 class _GradingScreenState extends State<GradingScreen> {
   List<StudentGradingGroup>? _groups;
-  String? _error;
   bool _loading = true;
   int _groupIndex = 0;
 
@@ -32,12 +31,12 @@ class _GradingScreenState extends State<GradingScreen> {
       setState(() {
         _groups = g;
         _loading = false;
-        _error = null;
       });
-    } catch (e) {
+    } catch (_) {
+      // Web bilan bir xil: xato bo'lsa ham "Baholash mavjud emas" ko'rinishi chiqadi.
       if (!mounted) return;
       setState(() {
-        _error = e.toString();
+        _groups = [];
         _loading = false;
       });
     }
@@ -50,12 +49,12 @@ class _GradingScreenState extends State<GradingScreen> {
 
   Widget _body(BuildContext context) {
     if (_loading) return const Loader();
-    if (_error != null) return EmptyState(icon: Icons.error_outline_rounded, text: _error!);
     final groups = _groups;
     if (groups == null || groups.isEmpty) {
       return const EmptyState(
         icon: Icons.check_circle_outline_rounded,
-        text: "Baholash mavjud emas.\nGuruhingizga baholash mezoni biriktirilmagan.",
+        text: 'Baholash mavjud emas',
+        sub: 'Guruhingizga baholash mezoni biriktirilmagan.',
       );
     }
     final idx = _groupIndex.clamp(0, groups.length - 1);

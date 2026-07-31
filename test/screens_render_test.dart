@@ -96,39 +96,38 @@ Widget _wrap(Widget child) => MaterialApp(
 void main() {
   setUp(() => ApiClient.dio.httpClientAdapter = _FakeAdapter());
 
-  testWidgets('Progress podium (Guruh + Markaz) renders without overflow', (tester) async {
+  testWidgets('Reyting (Guruh + Markaz) toshib ketmasdan chiziladi', (tester) async {
     await tester.pumpWidget(_wrap(const ProgressScreen()));
     for (var i = 0; i < 5; i++) {
       await tester.pump(const Duration(milliseconds: 300));
     }
-    // Guruh segmentiga o'tamiz (podium: 1-o'rta, 2-o'ng, 3-chap).
+    // Guruh segmentiga o'tamiz — "Sizning o'rningiz" kartasi + to'liq ro'yxat (web bilan bir xil).
     await tester.tap(find.text('Guruh'));
     await tester.pump(const Duration(milliseconds: 300));
-    expect(tester.takeException(), isNull, reason: 'Guruh podium threw');
+    expect(tester.takeException(), isNull, reason: 'Guruh reytingi threw');
 
     // Markaz segmenti.
     await tester.tap(find.text('Markaz'));
     await tester.pump(const Duration(milliseconds: 300));
-    expect(tester.takeException(), isNull, reason: 'Markaz podium threw');
+    expect(tester.takeException(), isNull, reason: 'Markaz reytingi threw');
   });
 
-  testWidgets('Dastur (Bolim/Mavzu) accordion renders and toggles', (tester) async {
+  testWidgets('Dastur yo\'l-xaritasi (web Progress.tsx) chiziladi', (tester) async {
     await tester.pumpWidget(_wrap(const ProgressScreen()));
     for (var i = 0; i < 6; i++) {
       await tester.pump(const Duration(milliseconds: 300));
     }
     expect(tester.takeException(), isNull, reason: 'dastur threw');
 
-    // Bo'lim karti ko'rinadi; joriy mavzu (Salomlashish) avtomatik ochiq.
-    expect(find.text('Boshlangich daraja'), findsOneWidget);
+    // Modul sarlavhasi katta harflarda, mavzu bayrog'i va darslar yo'l tugunlari.
+    expect(find.text('BOSHLANGICH DARAJA'), findsOneWidget);
     expect(find.text('Salomlashish'), findsOneWidget);
-    expect(find.text('Hello'), findsOneWidget); // ochiq mavzu ichidagi dars
+    expect(find.text('Hello'), findsOneWidget); // o'tilgan dars
+    expect(find.text('Goodbye'), findsOneWidget); // hali yopiq dars
 
-    // Bo'limni yopamiz — ichidagi mavzular yashirinadi.
-    await tester.tap(find.text('Boshlangich daraja'));
-    await tester.pump(const Duration(milliseconds: 300));
-    expect(find.text('Salomlashish'), findsNothing);
-    expect(tester.takeException(), isNull, reason: 'toggle threw');
+    // Keyingi modul mavzusi ham bir xil yo'lda chiziladi (akkordeon yo'q — hammasi ochiq).
+    expect(find.text('Raqamlar'), findsOneWidget);
+    expect(find.text('One to Ten'), findsOneWidget);
   });
 
   testWidgets('Profile card renders with long group name (no overflow)', (tester) async {

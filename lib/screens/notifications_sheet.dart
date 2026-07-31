@@ -107,20 +107,18 @@ class _NotificationsSheetState extends State<_NotificationsSheet> {
                 padding: const EdgeInsets.fromLTRB(18, 12, 10, 6),
                 child: Row(
                   children: [
-                    Icon(Icons.notifications_rounded, size: 20, color: c.accent),
-                    const SizedBox(width: 8),
                     Text('Bildirishnomalar',
                         style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: c.text)),
                     const Spacer(),
                     IconButton(
-                      icon: Icon(Icons.close_rounded, color: c.muted),
+                      icon: Icon(Icons.close_rounded, color: c.text),
                       onPressed: () => Navigator.of(ctx).pop(),
                     ),
                   ],
                 ),
               ),
               Divider(height: 1, color: c.border),
-              Expanded(child: _content(c, scrollController)),
+              Expanded(child: _content(scrollController)),
             ],
           ),
         );
@@ -128,24 +126,19 @@ class _NotificationsSheetState extends State<_NotificationsSheet> {
     );
   }
 
-  Widget _content(AppColors c, ScrollController sc) {
+  Widget _content(ScrollController sc) {
     if (_loading) return const Loader();
-    if (_error) {
+    final items = _items ?? const <AppNotification>[];
+    // Web'da xato ham, bo'sh ro'yxat ham bir xil holatni ko'rsatadi.
+    if (_error || items.isEmpty) {
       return ListView(
         controller: sc,
         children: const [
-          SizedBox(height: 80),
-          EmptyState(icon: Icons.wifi_off_rounded, text: "Bildirishnomalarni yuklab bo'lmadi."),
-        ],
-      );
-    }
-    final items = _items ?? const [];
-    if (items.isEmpty) {
-      return ListView(
-        controller: sc,
-        children: const [
-          SizedBox(height: 80),
-          EmptyState(icon: Icons.notifications_off_outlined, text: "Hozircha bildirishnoma yo'q."),
+          SizedBox(height: 40),
+          EmptyState(
+            icon: Icons.notifications_rounded,
+            text: "Bildirishnoma yo'q. Yangi e'lon va baholar shu yerda ko'rinadi.",
+          ),
         ],
       );
     }
@@ -164,71 +157,86 @@ class _NotifCard extends StatelessWidget {
   final VoidCallback onConfirm;
   const _NotifCard({required this.item, required this.onConfirm});
 
-  ({IconData icon, Color color}) _style(AppColors c) {
+  /// Bildirishnoma turiga mos ikonka (web `NOTIF_ICON` bilan bir xil).
+  /// Rang har doim accent — web ham shunday.
+  IconData _icon() {
     switch (item.type) {
       case 'grade':
-        return (icon: Icons.grade_rounded, color: c.green);
+        return Icons.bar_chart_rounded;
       case 'attendance':
-        return (icon: Icons.event_available_rounded, color: c.amber);
+        return Icons.check_circle_rounded;
       case 'payment':
-        return (icon: Icons.account_balance_wallet_rounded, color: c.accent);
-      case 'permission':
-        return (icon: Icons.assignment_turned_in_rounded, color: c.accent);
-      case 'warning':
-        return (icon: Icons.warning_amber_rounded, color: c.red);
+        return Icons.account_balance_wallet_rounded;
+      case 'pickup':
+        return Icons.person_rounded;
       default:
-        return (icon: Icons.notifications_rounded, color: c.accent);
+        return Icons.notifications_rounded;
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final c = AppTheme.of(context);
-    final s = _style(c);
-    final needsConfirm = item.type == 'permission' && !item.confirmed;
-    final when = '${fmtDate(item.createdAt)} ${fmtTime(item.createdAt)}'.trim();
+    // Faqat e'lon (announcement) turi tasdiqlanadi — web bilan bir xil.
+    final isAnnouncement = item.type == 'announcement';
+    final when = '${fmtDate(item.createdAt)} · ${fmtTime(item.createdAt)}';
 
-    return SCard(
+    return Container(
       padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: c.surface2,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: c.border),
+      ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
-            width: 38,
-            height: 38,
+            width: 36,
+            height: 36,
             alignment: Alignment.center,
-            decoration: BoxDecoration(color: s.color.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(11)),
-            child: Icon(s.icon, size: 19, color: s.color),
+            decoration: BoxDecoration(color: c.accentSoft, borderRadius: BorderRadius.circular(11)),
+            child: Icon(_icon(), size: 18, color: c.accent),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(item.title.isEmpty ? 'Bildirishnoma' : item.title,
-                          style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w800, color: c.text)),
-                    ),
-                    if (!item.read)
-                      Container(
-                        width: 8,
-                        height: 8,
-                        margin: const EdgeInsets.only(left: 6, top: 4),
-                        decoration: BoxDecoration(color: c.accent, shape: BoxShape.circle),
-                      ),
-                  ],
-                ),
+                Text(item.title.isEmpty ? 'Bildirishnoma' : item.title,
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: c.text)),
                 if (item.body.isNotEmpty) ...[
-                  const SizedBox(height: 3),
-                  Text(item.body, style: TextStyle(fontSize: 13, color: c.muted, height: 1.35)),
+                  const SizedBox(height: 2),
+                  Text(item.body, style: TextStyle(fontSize: 13, color: c.muted, height: 1.4)),
                 ],
-                const SizedBox(height: 6),
-                Text(when, style: TextStyle(fontSize: 11.5, color: c.faint)),
-                if (needsConfirm) ...[
-                  const SizedBox(height: 10),
-                  SButton('Tasdiqlash', icon: Icons.check_rounded, kind: BtnKind.soft, onTap: onConfirm),
+                const SizedBox(height: 4),
+                Text(when, style: TextStyle(fontSize: 11, color: c.faint)),
+                if (isAnnouncement) ...[
+                  const SizedBox(height: 8),
+                  if (item.confirmed)
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.check_circle_rounded, size: 14, color: c.green),
+                        const SizedBox(width: 4),
+                        Text('Tasdiqlandi',
+                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: c.green)),
+                      ],
+                    )
+                  else
+                    Material(
+                      color: c.accent,
+                      borderRadius: BorderRadius.circular(10),
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(10),
+                        onTap: onConfirm,
+                        child: const Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 16, vertical: 7),
+                          child: Text('Tasdiqlash',
+                              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Colors.white)),
+                        ),
+                      ),
+                    ),
                 ],
               ],
             ),

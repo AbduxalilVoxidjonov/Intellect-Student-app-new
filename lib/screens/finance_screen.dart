@@ -29,7 +29,77 @@ class _FinanceScreenState extends State<FinanceScreen> {
       final d = await StudentApi.finance();
       if (mounted) setState(() => _data = d);
     } catch (e) {
-      if (mounted) setState(() => _error = e.toString());
+      if (mounted) {
+        setState(() => _error = e.toString().replaceFirst(RegExp(r'^Exception:\s*'), ''));
+      }
+    }
+  }
+
+  /// To'lov usuli oynasi. To'lov gateway hali yo'q — tanlangach faqat xabar chiqadi.
+  Future<void> _openPaymentSheet() async {
+    final c = AppTheme.of(context);
+    const methods = [
+      ('Click', Color(0xFF3B82F6)),
+      ('Payme', Color(0xFF00CDB6)),
+      ('Uzum', Color(0xFF7C3AED)),
+    ];
+    final picked = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: c.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+      ),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 5,
+                margin: const EdgeInsets.only(bottom: 14),
+                decoration: BoxDecoration(color: c.border, borderRadius: BorderRadius.circular(3)),
+              ),
+            ),
+            Text("To'lov usuli",
+                style: TextStyle(fontSize: 19, fontWeight: FontWeight.w800, color: c.text, letterSpacing: -0.3)),
+            const SizedBox(height: 14),
+            for (final m in methods)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: SCard(
+                  radius: 15,
+                  padding: const EdgeInsets.all(14),
+                  onTap: () => Navigator.of(ctx).pop(m.$1),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 42,
+                        height: 42,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(color: m.$2, borderRadius: BorderRadius.circular(12)),
+                        child: Text(m.$1[0],
+                            style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800)),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text("${m.$1} orqali to'lash",
+                            style: TextStyle(fontSize: 15.5, fontWeight: FontWeight.w700, color: c.text)),
+                      ),
+                      Icon(Icons.chevron_right_rounded, size: 24, color: c.faint),
+                    ],
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (picked != null && mounted) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text("$picked orqali to'lov tez orada qo'shiladi")));
     }
   }
 
@@ -40,7 +110,9 @@ class _FinanceScreenState extends State<FinanceScreen> {
     if (_error != null) {
       return SubScaffold(
         title: "To'lovlar",
-        child: Center(child: EmptyState(icon: Icons.error_outline, text: _error!)),
+        child: Center(
+          child: EmptyState(icon: Icons.error_outline, text: "Yuklab bo'lmadi", sub: _error),
+        ),
       );
     }
     if (_data == null) {
@@ -96,6 +168,12 @@ class _FinanceScreenState extends State<FinanceScreen> {
               ],
             ),
           ),
+          // Qarz bo'lsa — to'lov usuli oynasini ochadigan tugma (gateway hali yo'q).
+          if (debt) ...[
+            const SizedBox(height: 16),
+            SButton("To'lovni amalga oshirish",
+                icon: Icons.account_balance_wallet_outlined, large: true, onTap: _openPaymentSheet),
+          ],
           const SizedBox(height: 16),
           Row(
             children: [
@@ -149,7 +227,13 @@ class _FinanceScreenState extends State<FinanceScreen> {
           const SizedBox(height: 16),
           const SectionTitle('To\'lovlar tarixi'),
           if (payments.isEmpty)
-            const SCard(child: EmptyState(icon: Icons.wallet_outlined, text: "To'lovlar yo'q"))
+            const SCard(
+              child: EmptyState(
+                icon: Icons.wallet_outlined,
+                text: "To'lovlar yo'q",
+                sub: "Hozircha to'lov qayd etilmagan.",
+              ),
+            )
           else
             SCard(
               padding: const EdgeInsets.all(4),

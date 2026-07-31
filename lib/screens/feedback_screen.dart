@@ -45,6 +45,38 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
     }
   }
 
+  /// Rasm manbasini tanlash (mobil uchun: galereya yoki kamera).
+  Future<void> _pickImageSheet() async {
+    final c = AppTheme.of(context);
+    final src = await showModalBottomSheet<ImageSource>(
+      context: context,
+      backgroundColor: c.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 8),
+            ListTile(
+              leading: Icon(Icons.photo_library_outlined, color: c.accent),
+              title: Text('Galereya', style: TextStyle(fontWeight: FontWeight.w700, color: c.text)),
+              onTap: () => Navigator.of(ctx).pop(ImageSource.gallery),
+            ),
+            ListTile(
+              leading: Icon(Icons.photo_camera_outlined, color: c.accent),
+              title: Text('Kamera', style: TextStyle(fontWeight: FontWeight.w700, color: c.text)),
+              onTap: () => Navigator.of(ctx).pop(ImageSource.camera),
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+    if (src != null) await _pickImage(src);
+  }
+
   void _removeImage() {
     setState(() {
       _imageBytes = null;
@@ -114,7 +146,7 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
             maxLines: 6,
             onChanged: (_) => setState(() {}),
             decoration: InputDecoration(
-              hintText: 'Fikringizni yozing...',
+              hintText: 'Fikringizni yozing…',
               filled: true,
               fillColor: c.surface,
               border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: c.border)),
@@ -124,65 +156,61 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
                   OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: c.accent)),
             ),
           ),
-          const SizedBox(height: 18),
-          Text('Rasm ilova qilish', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: c.text)),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: SButton(
-                  'Galereya',
-                  icon: Icons.photo_library,
-                  kind: BtnKind.soft,
-                  onTap: _sending ? null : () => _pickImage(ImageSource.gallery),
+          const SizedBox(height: 14),
+          // Rasm biriktirish — web'dagidek bitta punktir tugma, tanlangach fayl kartasi.
+          if (_imageBytes != null)
+            SCard(
+              radius: 16,
+              padding: const EdgeInsets.all(13),
+              child: Row(
+                children: [
+                  Container(
+                    width: 40,
+                    height: 40,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(color: c.accentSoft, borderRadius: BorderRadius.circular(11)),
+                    child: Icon(Icons.image_outlined, size: 20, color: c.accent),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(_imageName ?? 'image.jpg',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: c.text)),
+                  ),
+                  InkWell(
+                    onTap: _sending ? null : _removeImage,
+                    child: Icon(Icons.close_rounded, size: 18, color: c.faint),
+                  ),
+                ],
+              ),
+            )
+          else
+            InkWell(
+              onTap: _sending ? null : _pickImageSheet,
+              borderRadius: BorderRadius.circular(16),
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: c.surface,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: c.borderStrong, width: 1.5),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.photo_library_outlined, size: 22, color: c.accent),
+                    const SizedBox(width: 10),
+                    Text('Rasm biriktirish (ixtiyoriy)',
+                        style: TextStyle(fontWeight: FontWeight.w700, color: c.text)),
+                  ],
                 ),
               ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: SButton(
-                  'Kamera',
-                  icon: Icons.photo_camera,
-                  kind: BtnKind.soft,
-                  onTap: _sending ? null : () => _pickImage(ImageSource.camera),
-                ),
-              ),
-            ],
-          ),
-          if (_imageBytes != null) ...[
-            const SizedBox(height: 12),
-            Stack(
-              children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(14),
-                  child: Image.memory(
-                    _imageBytes!,
-                    height: 140,
-                    width: double.infinity,
-                    fit: BoxFit.cover,
-                  ),
-                ),
-                Positioned(
-                  top: 6,
-                  right: 6,
-                  child: Material(
-                    color: Colors.black.withValues(alpha: 0.55),
-                    shape: const CircleBorder(),
-                    child: InkWell(
-                      customBorder: const CircleBorder(),
-                      onTap: _sending ? null : _removeImage,
-                      child: const Padding(
-                        padding: EdgeInsets.all(6),
-                        child: Icon(Icons.close, size: 18, color: Colors.white),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
             ),
-          ],
-          const SizedBox(height: 20),
+          const SizedBox(height: 16),
           SButton(
-            _sending ? 'Yuborilmoqda...' : 'Yuborish',
+            _sending ? 'Yuborilmoqda…' : 'Yuborish',
             icon: Icons.send_rounded,
             large: true,
             loading: _sending,

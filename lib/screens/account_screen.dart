@@ -57,8 +57,10 @@ class _AccountScreenState extends State<AccountScreen> {
       await Future.delayed(const Duration(milliseconds: 700));
       if (mounted) Navigator.of(context).maybePop();
     } catch (e) {
+      // "Exception: " prefiksisiz xabar (web: e.message || "O'zgartirib bo'lmadi").
+      final msg = e.toString().replaceFirst(RegExp(r'^Exception:\s*'), '').trim();
       setState(() {
-        _error = e.toString();
+        _error = msg.isEmpty ? "O'zgartirib bo'lmadi" : msg;
         _busy = false;
       });
     }

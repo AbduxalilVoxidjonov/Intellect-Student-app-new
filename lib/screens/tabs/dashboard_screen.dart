@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:fl_chart/fl_chart.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../api/student_api.dart';
@@ -9,13 +8,29 @@ import '../../theme/app_theme.dart';
 import '../../utils/format.dart';
 import '../../widgets/ui.dart';
 import '../notifications_sheet.dart';
+import '../statistics_screen.dart';
 
-const _telegramBlue = Color(0xFF2AABEE);
+/// Telegram kanal kartasi rangi (web: `#229ED9`).
+const _telegramBlue = Color(0xFF229ED9);
 
-/// O'quvchi ilovasi — Dashboard tab.
-/// Asosiy: `dashboard()` (profil, balans). Best-effort (xato bo'lsa shu blok
-/// ko'rsatilmaydi): `rating()` (yig'ilgan ball), `notebook()` (umumiy statistika),
-/// `school()` (Telegram kanal havolasi).
+/// Web `--violet` (light: #7c3aed, dark: #a78bfa) — AppColors'da yo'q.
+Color _violet(AppColors c) => c.isDark ? const Color(0xFFA78BFA) : const Color(0xFF7C3AED);
+
+const _wdUz = ['Yakshanba', 'Dushanba', 'Seshanba', 'Chorshanba', 'Payshanba', 'Juma', 'Shanba'];
+const _moUz = [
+  'yanvar', 'fevral', 'mart', 'aprel', 'may', 'iyun',
+  'iyul', 'avgust', 'sentabr', 'oktabr', 'noyabr', 'dekabr',
+];
+
+/// Web `todayLine()` — "1-avgust, Shanba".
+String _todayLine() {
+  final d = DateTime.now();
+  return '${d.day}-${_moUz[d.month - 1]}, ${_wdUz[d.weekday % 7]}';
+}
+
+/// O'quvchi ilovasi — Dashboard tab (web: `pages/student/Dashboard.tsx`).
+/// Salom + bildirishnoma, qisqacha ko'rsatkichlar (dars qoldirish / balans / guruh),
+/// Telegram kanal va umumiy statistika. Barcha so'rovlar best-effort.
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
   @override
@@ -24,13 +39,10 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   StudentDashboard? _dash;
-  StudentRating? _rating;
   StudentNotebook? _notebook;
-  StudentSchoolInfo? _school;
+  String _channel = '';
   int _unread = 0;
   bool _loading = true;
-  bool _error = false;
-  String? _errorMsg;
 
   @override
   void initState() {
@@ -39,48 +51,26 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Future<void> _load() async {
+    if (mounted) setState(() => _loading = true);
+    // Web'dagidek: hamma so'rov parallel va xatosi yutiladi (blok bo'sh qiymat bilan chiziladi).
+    final results = await Future.wait<Object?>([
+      StudentApi.dashboard().then<Object?>((v) => v).catchError((_) => null),
+      StudentApi.notebook().then<Object?>((v) => v).catchError((_) => null),
+      StudentApi.school().then<Object?>((v) => v).catchError((_) => null),
+      StudentApi.notifications().then<Object?>((v) => v).catchError((_) => null),
+    ]);
+    if (!mounted) return;
     setState(() {
-      _loading = true;
-      _error = false;
-      _errorMsg = null;
+      _dash = results[0] as StudentDashboard?;
+      _notebook = results[1] as StudentNotebook?;
+      _channel = (results[2] as StudentSchoolInfo?)?.telegramChannel ?? '';
+      _unread = (results[3] as NotificationsResponse?)?.unread ?? 0;
+      _loading = false;
     });
-    try {
-      final d = await StudentApi.dashboard();
-      if (!mounted) return;
-      setState(() {
-        _dash = d;
-        _loading = false;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _error = true;
-        _errorMsg = e.toString();
-        _loading = false;
-      });
-      return;
-    }
-
-    try {
-      final r = await StudentApi.rating();
-      if (mounted) setState(() => _rating = r);
-    } catch (_) {}
-    try {
-      final nb = await StudentApi.notebook();
-      if (mounted) setState(() => _notebook = nb);
-    } catch (_) {}
-    try {
-      final s = await StudentApi.school();
-      if (mounted) setState(() => _school = s);
-    } catch (_) {}
-    try {
-      final n = await StudentApi.notifications();
-      if (mounted) setState(() => _unread = n.unread);
-    } catch (_) {}
   }
 
+  /// Qo'ng'iroq bosilganda — panel ochiladi va o'qilgan deb belgilanadi.
   Future<void> _openNotifications() async {
-    // Ochilishi bilan badge yo'qoladi (server ham "o'qildi" deb belgilaydi).
     setState(() => _unread = 0);
     await showNotificationsSheet(context);
   }
@@ -89,38 +79,37 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget build(BuildContext context) {
     final c = AppTheme.of(context);
     final session = context.watch<Session>();
-    final dash = _dash;
-    final profileName = dash?.profile.fullName ?? '';
-    final fullName = profileName.isNotEmpty ? profileName : session.fullName;
-    final greetName = fullName.isEmpty ? "O'quvchi" : fullName;
-    final todayLine = fmtDate(DateTime.now().toIso8601String(), weekday: true);
+    final profileName = _dash?.profile.fullName ?? '';
+    final sessionName = session.fullName;
+    final fullName = profileName.isNotEmpty
+        ? profileName
+        : (sessionName.isNotEmpty ? sessionName : "O'quvchi");
 
     return Column(
       children: [
+        // Salom + bildirishnoma
         Padding(
-          padding: const EdgeInsets.fromLTRB(20, 14, 20, 6),
+          padding: const EdgeInsets.fromLTRB(20, 10, 20, 6),
           child: Row(
             children: [
-              Avatar(name: greetName, imageUrl: dash?.profile.photoUrl, size: 48),
-              const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(todayLine,
+                    Text(_todayLine(),
                         style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: c.muted)),
-                    const SizedBox(height: 2),
                     Text.rich(
                       TextSpan(
                         style: TextStyle(
-                          fontSize: 20,
+                          fontSize: 21,
                           fontWeight: FontWeight.w800,
                           color: c.text,
                           letterSpacing: -0.3,
+                          height: 1.15,
                         ),
                         children: [
                           const TextSpan(text: 'Salom, '),
-                          TextSpan(text: greetName, style: TextStyle(color: c.accent)),
+                          TextSpan(text: fullName, style: TextStyle(color: c.accent)),
                           const TextSpan(text: ' \u{1F44B}'),
                         ],
                       ),
@@ -130,7 +119,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ],
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 10),
               _NotifBell(unread: _unread, onTap: _openNotifications),
             ],
           ),
@@ -140,53 +129,183 @@ class _DashboardScreenState extends State<DashboardScreen> {
             onRefresh: _load,
             color: c.accent,
             child: _loading
-                ? ListView(
-                    children: const [
-                      SizedBox(height: 220),
-                      Loader(),
-                    ],
-                  )
-                : (_error || dash == null)
-                    ? ListView(
-                        children: [
-                          const SizedBox(height: 120),
-                          EmptyState(
-                            icon: Icons.wifi_off_rounded,
-                            text: "Ma'lumotlarni yuklab bo'lmadi.\n"
-                                "${(_errorMsg ?? '').isNotEmpty ? '$_errorMsg\n\n' : ''}"
-                                "Qayta urinib ko'ring.",
-                          ),
-                          const SizedBox(height: 16),
-                          Center(
-                            child: SizedBox(
-                              width: 200,
-                              child: SButton(
-                                'Qayta urinish',
-                                icon: Icons.refresh_rounded,
-                                kind: BtnKind.soft,
-                                onTap: _load,
-                              ),
-                            ),
-                          ),
-                        ],
-                      )
-                    : _DashboardBody(dash: dash, rating: _rating, notebook: _notebook, school: _school),
+                ? ListView(children: const [SizedBox(height: 200), Loader()])
+                : _body(c, session),
           ),
         ),
       ],
     );
   }
-}
 
-double? _myBall(StudentRating? r) {
-  if (r == null) return null;
-  for (final row in r.classRows) {
-    if (row.studentId == r.meStudentId) return row.ball;
+  Widget _body(AppColors c, Session session) {
+    final nb = _notebook;
+    final balance = _dash?.balance ?? 0;
+    final className = (_dash?.profile.className ?? '').isNotEmpty ? _dash!.profile.className : '—';
+
+    // Umumiy statistika (notebook'dan, bo'sh bo'lsa 0)
+    final avg = nb?.avgGrade ?? 0;
+    final attended = nb?.attended ?? 0;
+    final conducted = nb?.conducted ?? 0;
+    final missed = conducted - attended > 0 ? conducted - attended : 0;
+    final attPct = (nb?.attendancePct ?? 0).round();
+    final disciplineRaw = (nb?.disciplineScore ?? 0).round();
+    final discipline = disciplineRaw != 0 ? disciplineRaw : 100;
+    final hwDone = nb?.homeworkDone ?? 0;
+    final hwMissed = nb?.homeworkMissed ?? 0;
+    final hwPct = hwDone + hwMissed > 0 ? (hwDone / (hwDone + hwMissed) * 100).round() : 0;
+    final discColor = discipline >= 85 ? c.green : (discipline >= 60 ? c.amber : c.red);
+
+    final isStudent = (session.user?['role'] as String?) != 'parent';
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 28),
+      physics: const AlwaysScrollableScrollPhysics(),
+      children: [
+        // Qisqacha: dars qoldirish · balans · guruh
+        IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(
+                child: _Quick(
+                  icon: Icons.warning_amber_rounded,
+                  label: 'Dars qoldirdi',
+                  value: '$missed',
+                  tone: missed > 0 ? c.amber : c.muted,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _Quick(
+                  icon: Icons.account_balance_wallet_rounded,
+                  label: 'Balans',
+                  value: fmtMoney(balance),
+                  tone: balance < 0 ? c.red : (balance > 0 ? c.green : c.muted),
+                  small: true,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _Quick(
+                  icon: Icons.school_rounded,
+                  label: 'Guruh',
+                  value: className,
+                  tone: c.accent,
+                  small: true,
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        // Telegram kanal (sozlangan bo'lsa, faqat o'quvchi)
+        if (_channel.trim().isNotEmpty && isStudent) ...[
+          const SizedBox(height: 14),
+          SCard(
+            onTap: () => _openTelegram(_channel.trim()),
+            child: Row(
+              children: [
+                Container(
+                  width: 42,
+                  height: 42,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: _telegramBlue,
+                    borderRadius: BorderRadius.circular(13),
+                  ),
+                  child: const Icon(Icons.send_rounded, size: 20, color: Colors.white),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Telegram kanalimiz',
+                          style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: c.text)),
+                      const SizedBox(height: 2),
+                      Text("Markaz e'lonlari — kanalga o'ting",
+                          style: TextStyle(fontSize: 12, color: c.muted)),
+                    ],
+                  ),
+                ),
+                Icon(Icons.chevron_right_rounded, size: 18, color: c.faint),
+              ],
+            ),
+          ),
+        ],
+
+        // Umumiy statistika
+        const SizedBox(height: 18),
+        SectionTitle(
+          'Umumiy statistika',
+          trailing: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const StatisticsScreen()),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('Batafsil',
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: c.accent)),
+                Icon(Icons.chevron_right_rounded, size: 16, color: c.accent),
+              ],
+            ),
+          ),
+        ),
+        IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(
+                child: _Stat(
+                  icon: Icons.bar_chart_rounded,
+                  label: "O'rtacha baho",
+                  value: avg > 0 ? avg.toStringAsFixed(2) : '—',
+                  color: gradeColor(avg),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _Stat(
+                  icon: Icons.check_circle_rounded,
+                  label: 'Davomat',
+                  value: '$attPct%',
+                  color: c.green,
+                  sub: conducted > 0 ? '$attended/$conducted dars' : null,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 10),
+        IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(
+                child: _Stat(
+                  icon: Icons.verified_user_rounded,
+                  label: 'Intizom balli',
+                  value: '$discipline',
+                  color: discColor,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _Stat(
+                  icon: Icons.check_circle_rounded,
+                  label: 'Uy vazifa',
+                  value: '$hwPct%',
+                  color: _violet(c),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
   }
-  for (final row in r.schoolRows) {
-    if (row.studentId == r.meStudentId) return row.ball;
-  }
-  return null;
 }
 
 /// Kanal manzilidan Telegram username'ini ajratadi:
@@ -258,7 +377,7 @@ class _NotifBell extends StatelessWidget {
               borderRadius: BorderRadius.circular(13),
               border: Border.all(color: c.border),
             ),
-            child: Icon(Icons.notifications_rounded, size: 21, color: c.text),
+            child: Icon(Icons.notifications_rounded, size: 20, color: c.text),
           ),
           if (unread > 0)
             Positioned(
@@ -274,7 +393,7 @@ class _NotifBell extends StatelessWidget {
                   border: Border.all(color: c.bg, width: 2),
                 ),
                 child: Text(
-                  unread > 99 ? '99+' : '$unread',
+                  unread > 9 ? '9+' : '$unread',
                   style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: Colors.white),
                 ),
               ),
@@ -285,191 +404,19 @@ class _NotifBell extends StatelessWidget {
   }
 }
 
-class _DashboardBody extends StatelessWidget {
-  final StudentDashboard dash;
-  final StudentRating? rating;
-  final StudentNotebook? notebook;
-  final StudentSchoolInfo? school;
-  const _DashboardBody({required this.dash, this.rating, this.notebook, this.school});
-
-  @override
-  Widget build(BuildContext context) {
-    final c = AppTheme.of(context);
-    final balance = dash.balance;
-    final balanceTone = balance < 0 ? c.red : (balance > 0 ? c.green : c.muted);
-    final className = dash.profile.className.isNotEmpty ? dash.profile.className : '—';
-    final ball = (_myBall(rating) ?? 0).round();
-    final telegramRaw = (school?.telegramChannel ?? '').trim();
-
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 4, 16, 28),
-      children: [
-        // Diqqat: ListView ichida balandlik cheksiz — shuning uchun
-        // `CrossAxisAlignment.stretch`li Row IntrinsicHeight bilan o'raladi,
-        // aks holda "infinite height" layout xatosi (bo'sh ekran) bo'ladi.
-        IntrinsicHeight(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Expanded(
-                child: _StatCard(
-                  icon: Icons.groups_rounded,
-                  label: 'Guruhim',
-                  value: className,
-                  tone: c.accent,
-                  maxLines: 2,
-                  valueFontSize: 15,
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _StatCard(
-                  icon: Icons.emoji_events_rounded,
-                  label: "Yig'ilgan ball",
-                  value: '$ball',
-                  tone: c.amber,
-                ),
-              ),
-            ],
-          ),
-        ),
-
-        const SizedBox(height: 10),
-        SCard(
-          child: Row(
-            children: [
-              Container(
-                width: 34,
-                height: 34,
-                alignment: Alignment.center,
-                decoration:
-                    BoxDecoration(color: balanceTone.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(10)),
-                child: Icon(Icons.account_balance_wallet_rounded, size: 18, color: balanceTone),
-              ),
-              const SizedBox(width: 12),
-              Text('Balans', style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600, color: c.muted)),
-              const Spacer(),
-              Text(fmtMoney(balance),
-                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: balanceTone)),
-            ],
-          ),
-        ),
-
-        if (telegramRaw.isNotEmpty) ...[
-          const SizedBox(height: 10),
-          SCard(
-            onTap: () => _openTelegram(telegramRaw),
-            child: Row(
-              children: [
-                Container(
-                  width: 34,
-                  height: 34,
-                  alignment: Alignment.center,
-                  decoration:
-                      BoxDecoration(color: _telegramBlue.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(10)),
-                  child: const Icon(Icons.send_rounded, size: 17, color: _telegramBlue),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text('Telegram kanalimiz',
-                      style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w700, color: c.text)),
-                ),
-                Icon(Icons.chevron_right_rounded, color: c.faint),
-              ],
-            ),
-          ),
-        ],
-
-        if (notebook != null) ..._statisticsSection(context, notebook!),
-      ],
-    );
-  }
-
-  List<Widget> _statisticsSection(BuildContext context, StudentNotebook nb) {
-    final c = AppTheme.of(context);
-    final gradesCount = nb.grades.values.fold<int>(0, (s, m) => s + m.length);
-    final hwTotal = nb.homeworkDone + nb.homeworkMissed;
-    final hwPct = hwTotal > 0 ? (nb.homeworkDone / hwTotal * 100).round() : 0;
-
-    return [
-      const SizedBox(height: 18),
-      const SectionTitle('Umumiy statistika'),
-      Row(
-        children: [
-          _MiniStat(value: '$gradesCount', label: 'Baholar', color: c.accent),
-          const SizedBox(width: 8),
-          _MiniStat(value: '${nb.attendancePct.round()}%', label: 'Davomat', color: c.green),
-          const SizedBox(width: 8),
-          _MiniStat(value: '${nb.homeworkDone}/$hwTotal', label: 'Uy vazifasi', color: c.amber),
-        ],
-      ),
-      const SizedBox(height: 10),
-      SCard(
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Ring(
-              value: nb.attendancePct,
-              max: 100,
-              size: 84,
-              stroke: 9,
-              color: c.green,
-              center: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text('${nb.attendancePct.round()}%',
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: c.green)),
-                  Text('davomat', style: TextStyle(fontSize: 9.5, color: c.muted)),
-                ],
-              ),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Uy vazifasi', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: c.text)),
-                  const SizedBox(height: 6),
-                  ProgressBar(hwTotal > 0 ? nb.homeworkDone / hwTotal : 0, color: c.amber),
-                  const SizedBox(height: 6),
-                  Text('$hwPct% bajarilgan (${nb.homeworkDone}/$hwTotal)',
-                      style: TextStyle(fontSize: 11.5, color: c.muted)),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-      const SizedBox(height: 10),
-      SCard(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text("Fanlar bo'yicha o'rtacha baho",
-                style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: c.text)),
-            const SizedBox(height: 10),
-            _SubjectAvgChart(c: c, nb: nb),
-          ],
-        ),
-      ),
-    ];
-  }
-}
-
-class _StatCard extends StatelessWidget {
+/// Qisqacha ko'rsatkich kartasi (web `Quick`).
+class _Quick extends StatelessWidget {
   final IconData icon;
   final String label;
   final String value;
   final Color tone;
-  final int maxLines;
-  final double valueFontSize;
-  const _StatCard({
+  final bool small;
+  const _Quick({
     required this.icon,
     required this.label,
     required this.value,
     required this.tone,
-    this.maxLines = 1,
-    this.valueFontSize = 18,
+    this.small = false,
   });
 
   @override
@@ -484,15 +431,18 @@ class _StatCard extends StatelessWidget {
             width: 30,
             height: 30,
             alignment: Alignment.center,
-            decoration: BoxDecoration(color: tone.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(9)),
-            child: Icon(icon, size: 16, color: tone),
+            decoration: BoxDecoration(
+              color: tone.withValues(alpha: 0.14),
+              borderRadius: BorderRadius.circular(9),
+            ),
+            child: Icon(icon, size: 17, color: tone),
           ),
           const SizedBox(height: 8),
           Text(
             value,
-            maxLines: maxLines,
+            maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: TextStyle(fontSize: valueFontSize, fontWeight: FontWeight.w800, color: tone, height: 1.15),
+            style: TextStyle(fontSize: small ? 14 : 20, fontWeight: FontWeight.w800, color: tone),
           ),
           const SizedBox(height: 2),
           Text(label, style: TextStyle(fontSize: 10.5, color: c.muted)),
@@ -502,95 +452,51 @@ class _StatCard extends StatelessWidget {
   }
 }
 
-class _MiniStat extends StatelessWidget {
-  final String value;
+/// Umumiy statistika kartasi (web `Stat`).
+class _Stat extends StatelessWidget {
+  final IconData icon;
   final String label;
+  final String value;
   final Color color;
-  const _MiniStat({required this.value, required this.label, required this.color});
+  final String? sub;
+  const _Stat({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.color,
+    this.sub,
+  });
 
   @override
   Widget build(BuildContext context) {
     final c = AppTheme.of(context);
-    return Expanded(
-      child: SCard(
-        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(value, style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: color)),
-            const SizedBox(height: 2),
-            Text(label, style: TextStyle(fontSize: 10, color: c.muted), textAlign: TextAlign.center),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _SubjectAvgChart extends StatelessWidget {
-  final AppColors c;
-  final StudentNotebook nb;
-  const _SubjectAvgChart({required this.c, required this.nb});
-
-  @override
-  Widget build(BuildContext context) {
-    final entries = nb.grades.entries
-        .map((e) {
-          final vals = e.value.values.where((v) => v > 0).toList();
-          final avg = vals.isEmpty ? 0.0 : vals.reduce((a, b) => a + b) / vals.length;
-          return MapEntry(e.key, avg);
-        })
-        .where((e) => e.value > 0)
-        .toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
-
-    if (entries.isEmpty) {
-      return const EmptyState(icon: Icons.bar_chart_outlined, text: "Baholar yo'q.");
-    }
-
-    final top = entries.length > 6 ? entries.sublist(0, 6) : entries;
-    final groups = <BarChartGroupData>[];
-    for (var i = 0; i < top.length; i++) {
-      final v = top[i].value;
-      groups.add(BarChartGroupData(x: i, barRods: [
-        BarChartRodData(toY: v, color: gradeColor(v), width: 18, borderRadius: BorderRadius.circular(5)),
-      ]));
-    }
-
-    return SizedBox(
-      height: 140,
-      child: BarChart(
-        BarChartData(
-          maxY: 5,
-          alignment: BarChartAlignment.spaceAround,
-          barTouchData: const BarTouchData(enabled: false),
-          gridData: const FlGridData(show: false),
-          borderData: FlBorderData(show: false),
-          titlesData: FlTitlesData(
-            leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-            topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-            rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-            bottomTitles: AxisTitles(
-              sideTitles: SideTitles(
-                showTitles: true,
-                reservedSize: 28,
-                getTitlesWidget: (value, meta) {
-                  final i = value.toInt();
-                  if (i < 0 || i >= top.length) return const SizedBox.shrink();
-                  final name = top[i].key;
-                  final short = name.length > 5 ? name.substring(0, 5) : name;
-                  return Padding(
-                    padding: const EdgeInsets.only(top: 6),
-                    child: Text(short,
-                        style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: c.faint),
-                        overflow: TextOverflow.ellipsis),
-                  );
-                },
-              ),
+    return SCard(
+      padding: const EdgeInsets.all(14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 32,
+            height: 32,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.14),
+              borderRadius: BorderRadius.circular(10),
             ),
+            child: Icon(icon, size: 18, color: color),
           ),
-          barGroups: groups,
-        ),
+          const SizedBox(height: 8),
+          Text(value,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: color)),
+          const SizedBox(height: 1),
+          Text(label, style: TextStyle(fontSize: 11.5, color: c.muted)),
+          if (sub != null) ...[
+            const SizedBox(height: 1),
+            Text(sub!, style: TextStyle(fontSize: 10.5, color: c.faint)),
+          ],
+        ],
       ),
     );
   }

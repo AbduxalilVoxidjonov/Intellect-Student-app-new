@@ -74,6 +74,32 @@ DueLabel assignmentDueLabel(
   return DueLabel('$dl kun qoldi', c.muted);
 }
 
+/// Web `Chip` — ikonka + matn, rangi 12% shaffof fonda.
+class AssignmentChip extends StatelessWidget {
+  final String label;
+  final IconData? icon;
+  final Color color;
+  final double fontSize;
+  const AssignmentChip(this.label, {super.key, this.icon, required this.color, this.fontSize = 12});
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (icon != null) ...[Icon(icon, size: fontSize + 1, color: color), const SizedBox(width: 4)],
+          Text(label, style: TextStyle(fontSize: fontSize, fontWeight: FontWeight.w700, color: color)),
+        ],
+      ),
+    );
+  }
+}
+
 enum _Filter { pending, done, all }
 
 class AssignmentsScreen extends StatefulWidget {
@@ -123,10 +149,18 @@ class _AssignmentsScreenState extends State<AssignmentsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final c = AppTheme.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const ScreenHeader('Topshiriqlar'),
+        ScreenHeader(
+          'Topshiriqlar',
+          subtitle: Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Text('Guruh topshiriqlari va testlar',
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: c.muted)),
+          ),
+        ),
         Expanded(child: _body(context)),
       ],
     );
@@ -134,7 +168,8 @@ class _AssignmentsScreenState extends State<AssignmentsScreen> {
 
   Widget _body(BuildContext context) {
     if (_error != null) {
-      return EmptyState(icon: Icons.error_outline_rounded, text: _error!);
+      // Web: Empty(title: "Yuklab bo'lmadi", sub: xato matni).
+      return EmptyState(icon: Icons.error_outline_rounded, text: "Yuklab bo'lmadi", sub: _error);
     }
     final items = _items;
     if (items == null) return const Loader();
@@ -170,7 +205,8 @@ class _AssignmentsScreenState extends State<AssignmentsScreen> {
           ),
           const SizedBox(height: 14),
           if (filtered.isEmpty)
-            const EmptyState(icon: Icons.check_circle_outline_rounded, text: "Bu bo'limda topshiriq yo'q.")
+            const EmptyState(
+                icon: Icons.check_circle_outline_rounded, text: "Bo'sh", sub: "Bu bo'limda topshiriq yo'q.")
           else
             for (final a in filtered) _AssignmentCard(assignment: a, onTap: () => _openAssignment(a.id)),
         ],
@@ -339,7 +375,7 @@ class _AssignmentCard extends StatelessWidget {
                             style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: c.muted)),
                       ),
                       const SizedBox(width: 6),
-                      SChip(fm.label, color: fm.color),
+                      AssignmentChip(fm.label, icon: fm.icon, color: fm.color, fontSize: 10.5),
                     ],
                   ),
                   const SizedBox(height: 3),
@@ -353,7 +389,7 @@ class _AssignmentCard extends StatelessWidget {
                       Text(due.text, style: TextStyle(color: due.color, fontSize: 12.5, fontWeight: FontWeight.w700)),
                       const Spacer(),
                       if (a.completed && a.score != null)
-                        SChip('${fmtScore(a.score!)} ball', color: gradeColor(a.score! / 20))
+                        AssignmentChip('${fmtScore(a.score!)} ball', color: gradeColor(a.score! / 20), fontSize: 11)
                       else
                         Text('${fmtDate(a.dueDate)} gacha', style: TextStyle(color: c.faint, fontSize: 12)),
                     ],

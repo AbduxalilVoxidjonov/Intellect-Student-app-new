@@ -105,9 +105,12 @@ void main() {
     final ex = tester.takeException();
     expect(ex, isNull, reason: 'success path threw: $ex');
 
-    // Asosiy kartalar chindan ekranda bo'lishi kerak.
-    expect(find.text('Guruhim'), findsOneWidget);
-    expect(find.text("Yig'ilgan ball"), findsOneWidget);
+    // Asosiy kartalar chindan ekranda bo'lishi kerak (web Dashboard.tsx tarkibi).
+    expect(find.text('Guruh'), findsOneWidget);
+    expect(find.text('Balans'), findsOneWidget);
+    expect(find.text('Dars qoldirdi'), findsOneWidget);
     expect(find.textContaining('Umumiy statistika'), findsWidgets);
+    expect(find.text("O'rtacha baho"), findsOneWidget);
+    expect(find.text('Davomat'), findsOneWidget);
   });
 }

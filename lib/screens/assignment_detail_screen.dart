@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../api/student_api.dart';
 import '../config.dart';
@@ -27,6 +28,13 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen> {
   final Map<String, int> _answers = {};
   SubmitResult? _testResult;
 
+  /// Fayl/video javob: yuklangan fayl va yuklash foizi (null — yuklanmayapti).
+  UploadedFile? _uploaded;
+  int? _upPct;
+
+  /// Speaking topshirig'ining oldingi natijasi (Azure talaffuz bahosi).
+  SpeakingResult? _speaking;
+
   final _answerCtrl = TextEditingController();
 
   @override
@@ -50,9 +58,18 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen> {
         _loadError = null;
         _answerCtrl.text = d.answerText ?? '';
       });
+      // Speaking bo'lsa — oldingi talaffuz natijasini ham olamiz (bo'lmasa jim o'tkazamiz).
+      if (d.format == 'speaking') {
+        try {
+          final r = await StudentApi.speaking(widget.assignmentId);
+          if (mounted && r != null) setState(() => _speaking = r);
+        } catch (_) {
+          // Natija yo'q — jim.
+        }
+      }
     } catch (e) {
       if (!mounted) return;
-      setState(() => _loadError = e.toString());
+      setState(() => _loadError = _errText(e));
     }
   }
 
@@ -76,11 +93,68 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen> {
       await StudentApi.submitAssignment(widget.assignmentId, answerText: _answerCtrl.text.trim());
       await _load();
     } catch (e) {
-      if (mounted) setState(() => _submitError = e.toString());
+      if (mounted) setState(() => _submitError = _errText(e));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
   }
+
+  /// Galereyadan fayl (video topshiriqda — faqat video) tanlab, serverga yuklaydi.
+  /// Web bilan bir xil: 20 MB chegara, yuklash foizi, keyin "Topshirish".
+  Future<void> _pickAndUpload(bool isVideo) async {
+    try {
+      final picker = ImagePicker();
+      final XFile? x = isVideo
+          ? await picker.pickVideo(source: ImageSource.gallery)
+          : await picker.pickMedia();
+      if (x == null) return;
+      final bytes = await x.readAsBytes();
+      if (bytes.length > 20 * 1024 * 1024) {
+        if (!mounted) return;
+        setState(() => _submitError =
+            'Fayl hajmi 20 MB dan oshmasligi kerak (${(bytes.length / 1e6).toStringAsFixed(1)} MB).');
+        return;
+      }
+      if (!mounted) return;
+      setState(() {
+        _submitError = null;
+        _upPct = 0;
+      });
+      final up = await StudentApi.uploadFile(
+        bytes,
+        x.name,
+        onProgress: (sent, total) {
+          if (!mounted || total <= 0) return;
+          setState(() => _upPct = ((sent / total) * 100).round());
+        },
+      );
+      if (!mounted) return;
+      setState(() => _uploaded = up);
+    } catch (e) {
+      if (mounted) setState(() => _submitError = _errText(e));
+    } finally {
+      if (mounted) setState(() => _upPct = null);
+    }
+  }
+
+  /// Fayl/video javobni topshirish.
+  Future<void> _submitFile() async {
+    setState(() {
+      _busy = true;
+      _submitError = null;
+    });
+    try {
+      await StudentApi.submitAssignment(widget.assignmentId, fileUrl: _uploaded?.url);
+      await _load();
+    } catch (e) {
+      if (mounted) setState(() => _submitError = _errText(e));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  /// "Exception: " prefiksisiz xato matni (web'dagi kabi toza xabar).
+  String _errText(Object e) => e.toString().replaceFirst('Exception: ', '');
 
   Future<void> _submitTest() async {
     setState(() {
@@ -93,7 +167,7 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen> {
       if (!mounted) return;
       setState(() => _testResult = r);
     } catch (e) {
-      if (mounted) setState(() => _submitError = e.toString());
+      if (mounted) setState(() => _submitError = _errText(e));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -122,7 +196,10 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen> {
 
   Widget _buildScaffold(BuildContext context) {
     if (_loadError != null) {
-      return SubScaffold(title: 'Topshiriq', child: EmptyState(icon: Icons.error_outline_rounded, text: _loadError!));
+      return SubScaffold(
+        title: 'Topshiriq',
+        child: EmptyState(icon: Icons.error_outline_rounded, text: "Yuklab bo'lmadi", sub: _loadError),
+      );
     }
     final a = _a;
     if (a == null) {
@@ -137,7 +214,7 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen> {
     final fm = assignmentFormatMeta(a.format);
     return SubScaffold(
       title: a.subjectName,
-      actions: [SChip(fm.label, color: fm.color)],
+      actions: [AssignmentChip(fm.label, icon: fm.icon, color: fm.color)],
       scrollable: true,
       child: _buildDetail(context, a),
     );
@@ -228,13 +305,13 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen> {
           ],
           if (a.format == 'speaking') ...[
             const SizedBox(height: 16),
-            _speakingPlaceholder(c, a),
+            _speakingSection(c, a),
           ],
           if (!a.completed && a.format != 'speaking') ...[
             const SizedBox(height: 16),
             if (a.format == 'test') _testIntroCard(c, a),
             if (a.format == 'written') _writtenForm(c),
-            if (a.format == 'file' || a.format == 'video') _filePlaceholder(c, a),
+            if (a.format == 'file' || a.format == 'video') _fileForm(c, a),
           ],
           if (_submitError != null)
             Padding(
@@ -353,24 +430,184 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen> {
     );
   }
 
-  Widget _speakingPlaceholder(AppColors c, StudentAssignmentDetail a) {
-    return SCard(
-      radius: 18,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Icon(Icons.mic_none_rounded, size: 32, color: c.accent),
-          const SizedBox(height: 10),
-          const Text("Speaking topshirig'i", style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
-          const SizedBox(height: 6),
-          Text("Ovozli javob yozib olish bu build'da hali qo'llanmaydi.",
-              textAlign: TextAlign.center, style: TextStyle(fontSize: 13, color: c.muted)),
-          if (a.completed && a.score != null) ...[
-            const SizedBox(height: 12),
-            Text('${fmtScore(a.score!)} / ${fmtScore(a.maxScore)} ball',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: gradeColor(a.score! / 20))),
+  /// Speaking bo'limi — web `SpeakingRecorder`: o'qiladigan matn + yozuvchi + sharh.
+  /// DIQQAT: ilovada mikrofondan WAV yozish paketi yo'q — yozish tugmasi o'rniga izoh
+  /// ko'rsatiladi, oldingi natija (bo'lsa) web'dagidek to'liq chiqadi.
+  Widget _speakingSection(AppColors c, StudentAssignmentDetail a) {
+    final ref = (a.referenceText ?? '').trim();
+    final r = _speaking;
+    final showReview = r != null && (r.error == null || r.error!.isEmpty);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SCard(
+          radius: 16,
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text("O'qing", style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800)),
+              const SizedBox(height: 6),
+              ref.isNotEmpty
+                  ? Text(ref, style: const TextStyle(fontSize: 16, height: 1.5))
+                  : Text('Mavzu bo\'yicha erkin gapiring', style: TextStyle(fontSize: 14, color: c.muted)),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+        SCard(
+          radius: 16,
+          padding: const EdgeInsets.all(18),
+          child: Column(
+            children: [
+              Icon(Icons.mic_none_rounded, size: 32, color: c.accent),
+              const SizedBox(height: 10),
+              Text('Ovoz yozish ilovada hali qo\'llanmaydi — veb-saytdan yozib yuboring.',
+                  textAlign: TextAlign.center, style: TextStyle(fontSize: 13, color: c.muted)),
+            ],
+          ),
+        ),
+        if (r != null && r.error != null && r.error!.isNotEmpty) ...[
+          const SizedBox(height: 14),
+          SCard(
+            radius: 16,
+            padding: const EdgeInsets.all(14),
+            child: Row(
+              children: [
+                Icon(Icons.warning_amber_rounded, size: 20, color: c.red),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(r.error!,
+                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: c.red)),
+                ),
+              ],
+            ),
+          ),
+        ],
+        if (showReview) ...[
+          const SizedBox(height: 14),
+          SCard(
+            radius: 16,
+            padding: const EdgeInsets.all(18),
+            child: Column(
+              children: [
+                Text('${r.pronScore.round()}',
+                    style: TextStyle(fontSize: 52, fontWeight: FontWeight.w800, height: 1, color: _pronColor(c, r.pronScore))),
+                const SizedBox(height: 6),
+                Text('Umumiy ball', style: TextStyle(fontSize: 13, color: c.muted)),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+          SCard(
+            radius: 16,
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              children: [
+                _scoreBar(c, 'Aniqlik', r.accuracy),
+                _scoreBar(c, 'Ravonlik', r.fluency),
+                _scoreBar(c, "To'liqlik", r.completeness),
+                _scoreBar(c, 'Ohang', r.prosody),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+          SCard(
+            radius: 16,
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Tanilgan matn', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800)),
+                const SizedBox(height: 6),
+                Text(r.recognizedText.isEmpty ? '—' : r.recognizedText,
+                    style: const TextStyle(fontSize: 15, height: 1.5)),
+              ],
+            ),
+          ),
+          if (r.words.isNotEmpty) ...[
+            const SizedBox(height: 14),
+            SCard(
+              radius: 16,
+              padding: const EdgeInsets.all(14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text("So'zlar", style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800)),
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [for (final w in r.words) _wordChip(c, w)],
+                  ),
+                ],
+              ),
+            ),
           ],
         ],
+      ],
+    );
+  }
+
+  /// Talaffuz balli rangi: >=80 yashil, >=60 sariq, past qizil.
+  Color _pronColor(AppColors c, double v) {
+    if (v >= 80) return c.green;
+    if (v >= 60) return const Color(0xFFD97706);
+    return c.red;
+  }
+
+  Widget _scoreBar(AppColors c, String label, double value) {
+    final v = value.clamp(0, 100).round();
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(child: Text(label, style: TextStyle(fontSize: 13, color: c.muted))),
+              Text('$v', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800)),
+            ],
+          ),
+          const SizedBox(height: 4),
+          ProgressBar(v / 100, height: 7, color: _pronColor(c, v.toDouble())),
+        ],
+      ),
+    );
+  }
+
+  Widget _wordChip(AppColors c, SpeakingWord w) {
+    final omission = w.errorType == 'Omission';
+    final insertion = w.errorType == 'Insertion';
+    final color = omission ? c.red : _pronColor(c, w.accuracy);
+    return Opacity(
+      opacity: omission ? 0.55 : 1,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+        decoration: BoxDecoration(
+          color: c.surface,
+          borderRadius: BorderRadius.circular(9),
+          border: Border.all(color: color),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.baseline,
+          textBaseline: TextBaseline.alphabetic,
+          children: [
+            Text(w.word,
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: color,
+                  decoration: omission ? TextDecoration.lineThrough : null,
+                )),
+            if (omission || insertion) ...[
+              const SizedBox(width: 4),
+              Text(omission ? 'tushib qoldi' : 'ortiqcha',
+                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: color)),
+            ],
+          ],
+        ),
       ),
     );
   }
@@ -446,21 +683,108 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen> {
     );
   }
 
-  Widget _filePlaceholder(AppColors c, StudentAssignmentDetail a) {
+  /// Fayl/video javob: tanlash → yuklash foizi → yuklangan fayl → "Topshirish".
+  Widget _fileForm(AppColors c, StudentAssignmentDetail a) {
     final isVideo = a.format == 'video';
-    return SCard(
-      radius: 18,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Icon(isVideo ? Icons.videocam_rounded : Icons.upload_file_rounded, size: 32, color: c.accent),
-          const SizedBox(height: 10),
-          Text(isVideo ? 'Video javob' : 'Fayl javob', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
-          const SizedBox(height: 6),
-          Text("Fayl/video yuklash bu build'da hali qo'llanmaydi.",
-              textAlign: TextAlign.center, style: TextStyle(fontSize: 13, color: c.muted)),
-        ],
-      ),
+    final up = _uploaded;
+    final pct = _upPct;
+    Widget body;
+    if (pct != null) {
+      body = SCard(
+        radius: 16,
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                const Expanded(
+                  child: Text('Yuklanmoqda…', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
+                ),
+                Text('$pct%', style: TextStyle(fontWeight: FontWeight.w800, color: c.accent)),
+              ],
+            ),
+            const SizedBox(height: 10),
+            ProgressBar(pct / 100, height: 7),
+          ],
+        ),
+      );
+    } else if (up != null) {
+      body = SCard(
+        radius: 16,
+        padding: const EdgeInsets.all(13),
+        child: Row(
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(color: c.accentSoft, borderRadius: BorderRadius.circular(11)),
+              child: Icon(isVideo ? Icons.videocam_rounded : Icons.insert_drive_file_rounded,
+                  size: 20, color: c.accent),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(up.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
+                  Text('Yuklandi',
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: c.green)),
+                ],
+              ),
+            ),
+            IconButton(
+              icon: Icon(Icons.close_rounded, size: 18, color: c.faint),
+              onPressed: () => setState(() => _uploaded = null),
+            ),
+          ],
+        ),
+      );
+    } else {
+      body = Material(
+        color: c.surface,
+        borderRadius: BorderRadius.circular(16),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: () => _pickAndUpload(isVideo),
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 26, horizontal: 16),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: c.borderStrong, width: 1.5),
+            ),
+            child: Column(
+              children: [
+                Icon(isVideo ? Icons.photo_camera_rounded : Icons.upload_rounded, size: 28, color: c.accent),
+                const SizedBox(height: 8),
+                Text(isVideo ? 'Video tanlash' : 'Fayl tanlash',
+                    style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w700)),
+                const SizedBox(height: 2),
+                Text('Maksimal 20 MB', style: TextStyle(fontSize: 12, color: c.faint)),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SectionTitle(isVideo ? 'Video javob' : 'Fayl javob'),
+        body,
+        const SizedBox(height: 14),
+        SButton(
+          _busy ? 'Yuborilmoqda…' : 'Topshirish',
+          large: true,
+          loading: _busy,
+          onTap: (_uploaded == null || _busy) ? null : _submitFile,
+        ),
+      ],
     );
   }
 

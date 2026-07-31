@@ -308,6 +308,81 @@ class StudentApi {
     if (!ApiClient.ok(res)) _fail(res);
   }
 
+  // ---------- AI tekshiruv (Writing / Speaking) ----------
+  /// Bugungi holat: kalitlar tayyorligi + limit/premium/blok.
+  static Future<AiCheckStatus> aiCheckStatus({String? studentId}) async {
+    final res = await ApiClient.dio.get('/student/ai-check/status', queryParameters: _sid(studentId));
+    if (!ApiClient.ok(res)) _fail(res);
+    return AiCheckStatus.fromJson((res.data as Map).cast<String, dynamic>());
+  }
+
+  /// Tekshiruvlar tarixi (eng yangi birinchi).
+  static Future<List<AiCheckListItem>> aiCheckHistory({String? studentId}) async {
+    final res = await ApiClient.dio.get('/student/ai-check/history', queryParameters: _sid(studentId));
+    if (!ApiClient.ok(res)) _fail(res);
+    return (res.data as List)
+        .map((e) => AiCheckListItem.fromJson((e as Map).cast<String, dynamic>()))
+        .toList();
+  }
+
+  /// Bitta yozuv (to'liq — matn/ovoz/tahlil).
+  static Future<AiCheck> aiCheckItem(String id, {String? studentId}) async {
+    final res = await ApiClient.dio.get('/student/ai-check/history/$id', queryParameters: _sid(studentId));
+    if (!ApiClient.ok(res)) _fail(res);
+    return AiCheck.fromJson((res.data as Map).cast<String, dynamic>());
+  }
+
+  /// Writing — matn yuboriladi, Gemini tahlil qiladi.
+  /// [taskType]: `ielts_task1` | `ielts_task2` (bo'sh bo'lsa umumiy baholash).
+  static Future<AiCheck> aiCheckWriting(String text, {String? prompt, String? taskType}) async {
+    final res = await ApiClient.dio.post('/student/ai-check/writing', data: {
+      'text': text,
+      if (prompt != null && prompt.isNotEmpty) 'prompt': prompt,
+      if (taskType != null && taskType.isNotEmpty) 'taskType': taskType,
+    });
+    if (!ApiClient.ok(res)) _fail(res);
+    return AiCheck.fromJson((res.data as Map).cast<String, dynamic>());
+  }
+
+  /// Speaking — WAV ovoz yuboriladi (Azure + Gemini).
+  static Future<AiCheck> aiCheckSpeaking(List<int> wavBytes, {String? prompt, String? referenceText}) async {
+    final fd = FormData.fromMap({
+      'audio': MultipartFile.fromBytes(wavBytes, filename: 'speaking.wav'),
+      if (prompt != null && prompt.isNotEmpty) 'prompt': prompt,
+      if (referenceText != null && referenceText.isNotEmpty) 'referenceText': referenceText,
+    });
+    final res = await ApiClient.dio.post('/student/ai-check/speaking', data: fd);
+    if (!ApiClient.ok(res)) _fail(res);
+    return AiCheck.fromJson((res.data as Map).cast<String, dynamic>());
+  }
+
+  // ---------- Dars topshirig'i urinishi ----------
+  /// Dars bo'limi yakunlanganda natijani saqlaydi (har chaqiruv — yangi urinish).
+  /// [section]: `exercise` | `test` | `view`. Xato YUTILADI — natija ko'rsatilishi bunga bog'liq emas.
+  static Future<void> saveCourseAttempt({
+    required String itemId,
+    required String section,
+    String? exerciseKind,
+    required int correct,
+    required int total,
+    required int durationSec,
+    List<AttemptAnswer>? answers,
+  }) async {
+    try {
+      await ApiClient.dio.post('/student/curriculum/attempt', data: {
+        'itemId': itemId,
+        'section': section,
+        if (exerciseKind != null && exerciseKind.isNotEmpty) 'exerciseKind': exerciseKind,
+        'correct': correct,
+        'total': total,
+        'durationSec': durationSec,
+        if (answers != null) 'answers': answers.map((a) => a.toJson()).toList(),
+      });
+    } catch (_) {
+      // Natija ko'rsatilishi saqlanishga bog'liq emas.
+    }
+  }
+
   // ---------- Test natijalari (O'quv bo'limi testlari) ----------
   /// O'quvchining barcha test natijalari (sana desc, rank/total bilan).
   static Future<List<StudentTestResult>> testResults({String? studentId}) async {
@@ -316,5 +391,35 @@ class StudentApi {
     return (res.data as List)
         .map((e) => StudentTestResult.fromJson((e as Map).cast<String, dynamic>()))
         .toList();
+  }
+
+  // ---------- Support (yordam darslari) ----------
+  /// Bo'sh slotli support o'qituvchilar + o'quvchining o'z bronlari.
+  static Future<StudentSupport> support({String? studentId}) async {
+    final res = await ApiClient.dio.get('/student/support', queryParameters: _sid(studentId));
+    if (!ApiClient.ok(res)) _fail(res);
+    return StudentSupport.fromJson((res.data as Map).cast<String, dynamic>());
+  }
+
+  /// Bo'sh slotni bron qilish.
+  static Future<void> bookSupportSlot(String id) async {
+    final res = await ApiClient.dio.post('/student/support/slots/$id/book');
+    if (!ApiClient.ok(res)) _fail(res);
+  }
+
+  /// O'z bronini bekor qilish.
+  static Future<void> cancelSupportSlot(String id) async {
+    final res = await ApiClient.dio.post('/student/support/slots/$id/cancel');
+    if (!ApiClient.ok(res)) _fail(res);
+  }
+
+  // ---------- Shartnoma ----------
+  /// O'quvchi/ota-ona bilan tuzilgan shartnomalarning elektron nusxalari (yangisi birinchi).
+  static Future<List<ContractDoc>> contracts({String? studentId}) async {
+    final res = await ApiClient.dio.get('/student/contracts', queryParameters: _sid(studentId));
+    if (!ApiClient.ok(res)) _fail(res);
+    final data = res.data;
+    if (data is! List) return const [];
+    return data.map((e) => ContractDoc.fromJson((e as Map).cast<String, dynamic>())).toList();
   }
 }

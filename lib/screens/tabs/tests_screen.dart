@@ -52,7 +52,14 @@ class _TestsScreenState extends State<TestsScreen> {
 
     return Column(
       children: [
-        const ScreenHeader('Testlar'),
+        ScreenHeader(
+          'Testlar',
+          subtitle: Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Text("Guruh testlari natijalari",
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: c.muted)),
+          ),
+        ),
         Expanded(
           child: RefreshIndicator(
             onRefresh: _load,
@@ -108,9 +115,15 @@ class _TestCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = AppTheme.of(context);
     final hasScore = item.score != null;
+    // "🥇 1-o'rin (12 tadan)" — reyting shu testda baholanganlar orasida.
     final rankLabel = item.rank <= 0
         ? '—'
-        : '${item.rank <= 3 ? '${_medals[item.rank - 1]} ' : ''}${item.rank}-o\'rin';
+        : '${item.rank <= 3 ? '${_medals[item.rank - 1]} ' : ''}${item.rank}-o\'rin'
+            '${item.total > 0 ? ' (${item.total} tadan)' : ''}';
+    // Ball rangi — 5 balllik shkalaga keltirib (web `gradeColor` bilan bir xil).
+    final scoreColor = hasScore && item.maxScore > 0
+        ? gradeColor((item.score! / item.maxScore) * 5)
+        : c.faint;
 
     return SCard(
       child: Row(
@@ -146,7 +159,7 @@ class _TestCard extends StatelessWidget {
                 hasScore
                     ? '${item.score! % 1 == 0 ? item.score!.toInt() : item.score}/${item.maxScore % 1 == 0 ? item.maxScore.toInt() : item.maxScore}'
                     : '—',
-                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: hasScore ? c.text : c.faint),
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: scoreColor),
               ),
               const SizedBox(height: 2),
               Text(rankLabel,

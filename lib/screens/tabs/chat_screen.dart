@@ -108,12 +108,17 @@ class _ChatScreenState extends State<ChatScreen> {
           child: _loading
               ? const Loader()
               : _error != null
-                  ? Center(child: EmptyState(icon: Icons.error_outline_rounded, text: _error!))
+                  ? Center(
+                      child: EmptyState(
+                        icon: Icons.error_outline_rounded,
+                        text: "Yuklab bo'lmadi.\n$_error",
+                      ),
+                    )
                   : _messages.isEmpty
                       ? const Center(
                           child: EmptyState(
                             icon: Icons.chat_bubble_outline_rounded,
-                            text: "Hozircha guruhda xabar yo'q.",
+                            text: "Xabar yo'q. Hozircha guruhda xabar yo'q.",
                           ),
                         )
                       : ListView.builder(
@@ -122,8 +127,18 @@ class _ChatScreenState extends State<ChatScreen> {
                           itemCount: _messages.length,
                           itemBuilder: (context, i) {
                             final m = _messages[i];
-                            final prevSame = i > 0 && _messages[i - 1].senderUserId == m.senderUserId;
-                            return _Bubble(m: m, mine: m.senderUserId == meId, prevSame: prevSame);
+                            // Kunlik SANA ajratgichi: xabarning kuni avvalgisidan farq qilsa
+                            // (yoki bu birinchi xabar bo'lsa) tepasida "Bugun / Kecha / 12 Iyul".
+                            final showDate = i == 0 || !_sameDay(_messages[i - 1].createdAt, m.createdAt);
+                            // Yangi kun boshlansa yuboruvchi qayta ko'rsatiladi (avatar + nom).
+                            final prevSame =
+                                i > 0 && !showDate && _messages[i - 1].senderUserId == m.senderUserId;
+                            final bubble = _Bubble(m: m, mine: m.senderUserId == meId, prevSame: prevSame);
+                            if (!showDate) return bubble;
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [_DateDivider(iso: m.createdAt), bubble],
+                            );
                           },
                         ),
         ),
@@ -191,6 +206,60 @@ class _ChatScreenState extends State<ChatScreen> {
               child: const SizedBox(width: 44, height: 44, child: Icon(Icons.send_rounded, color: Colors.white, size: 20)),
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Ikki ISO vaqt bir XIL kunga tegishlimi (mahalliy vaqt bo'yicha).
+/// Mahalliy vaqt muhim: aks holda kechqurungi xabarlar qo'shni kunga tushib qoladi.
+bool _sameDay(String? a, String? b) {
+  final x = DateTime.tryParse(a ?? '')?.toLocal();
+  final y = DateTime.tryParse(b ?? '')?.toLocal();
+  if (x == null || y == null) return x == null && y == null;
+  return x.year == y.year && x.month == y.month && x.day == y.day;
+}
+
+/// Chatdagi kunlik sana ajratgichi — "Bugun" / "Kecha" / "12 Iyul"
+/// (o'tgan yil bo'lsa "12 Iyul, 2025").
+class _DateDivider extends StatelessWidget {
+  final String iso;
+  const _DateDivider({required this.iso});
+
+  String _label() {
+    final d = DateTime.tryParse(iso)?.toLocal();
+    if (d == null) return '';
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final day = DateTime(d.year, d.month, d.day);
+    final diff = today.difference(day).inDays;
+    if (diff == 0) return 'Bugun';
+    if (diff == 1) return 'Kecha';
+    final base = fmtDate(iso);
+    return d.year == now.year ? base : '$base, ${d.year}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = AppTheme.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(top: 4, bottom: 10),
+      child: Row(
+        children: [
+          Expanded(child: Divider(color: c.border, height: 1)),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(color: c.surface2, borderRadius: BorderRadius.circular(10)),
+              child: Text(
+                _label(),
+                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: c.muted),
+              ),
+            ),
+          ),
+          Expanded(child: Divider(color: c.border, height: 1)),
         ],
       ),
     );

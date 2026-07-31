@@ -267,7 +267,10 @@ class Avatar extends StatelessWidget {
 class EmptyState extends StatelessWidget {
   final IconData icon;
   final String text;
-  const EmptyState({super.key, this.icon = Icons.inbox_outlined, required this.text});
+
+  /// Ixtiyoriy izoh qatori (web `Empty`dagi `sub`).
+  final String? sub;
+  const EmptyState({super.key, this.icon = Icons.inbox_outlined, required this.text, this.sub});
   @override
   Widget build(BuildContext context) {
     final c = AppTheme.of(context);
@@ -284,6 +287,12 @@ class EmptyState extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           Text(text, textAlign: TextAlign.center, style: TextStyle(color: c.muted, fontSize: 14)),
+          if (sub != null && sub!.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text(sub!,
+                textAlign: TextAlign.center,
+                style: TextStyle(color: c.faint, fontSize: 13.5, height: 1.5)),
+          ],
         ],
       ),
     );
@@ -408,7 +417,11 @@ class SButton extends StatelessWidget {
 class GradeBox extends StatelessWidget {
   final num? grade;
   final double size;
-  const GradeBox(this.grade, {super.key, this.size = 30});
+  /// Burchak radiusi va matn o'lchami — berilmasa web `gradeChip` nisbatlari
+  /// ishlatiladi (radius = size*0.32, matn = size*0.5).
+  final double? radius;
+  final double? fontSize;
+  const GradeBox(this.grade, {super.key, this.size = 30, this.radius, this.fontSize});
   @override
   Widget build(BuildContext context) {
     final c = AppTheme.of(context);
@@ -420,9 +433,13 @@ class GradeBox extends StatelessWidget {
       width: size,
       height: size,
       alignment: Alignment.center,
-      decoration: BoxDecoration(color: col.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(8)),
-      child: Text('${grade! % 1 == 0 ? grade!.toInt() : grade}',
-          style: TextStyle(color: col, fontWeight: FontWeight.w800, fontSize: 14)),
+      decoration: BoxDecoration(
+        color: col.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(radius ?? 8),
+      ),
+      // Web `gradeChip`: butun son bo'lsa butun, aks holda bitta kasr xonasi.
+      child: Text(grade! % 1 == 0 ? '${grade!.toInt()}' : grade!.toStringAsFixed(1),
+          style: TextStyle(color: col, fontWeight: FontWeight.w800, fontSize: fontSize ?? 14)),
     );
   }
 }

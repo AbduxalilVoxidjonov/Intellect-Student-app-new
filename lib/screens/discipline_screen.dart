@@ -41,7 +41,7 @@ class _DisciplineScreenState extends State<DisciplineScreen> {
 
   Widget _body(BuildContext context) {
     if (_error != null) {
-      return Center(child: EmptyState(icon: Icons.error_outline, text: _error!));
+      return Center(child: EmptyState(icon: Icons.error_outline, text: "Yuklab bo'lmadi.\n$_error"));
     }
     final data = _data;
     if (data == null) return const Loader();

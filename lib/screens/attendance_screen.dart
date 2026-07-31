@@ -41,7 +41,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
 
   Widget _body(BuildContext context) {
     if (_error != null) {
-      return Center(child: EmptyState(icon: Icons.error_outline, text: _error!));
+      return Center(child: EmptyState(icon: Icons.error_outline, text: "Yuklab bo'lmadi.\n$_error"));
     }
     final data = _data;
     if (data == null) return const Loader();
@@ -75,7 +75,34 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
             padding: const EdgeInsets.all(4),
             child: Column(
               children: [
-                for (var i = 0; i < rows.length; i++) _row(context, c, rows[i], i < rows.length - 1),
+                // Jadval sarlavhasi — «№» ustuni (web jurnal jadvali bilan bir xil uslub).
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(11, 8, 11, 6),
+                  child: Row(
+                    children: [
+                      SizedBox(
+                        width: 22,
+                        child: Text('№',
+                            style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w800,
+                                color: c.faint,
+                                letterSpacing: 0.3)),
+                      ),
+                      Expanded(
+                        child: Text('DARS',
+                            style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w800,
+                                color: c.faint,
+                                letterSpacing: 0.3)),
+                      ),
+                    ],
+                  ),
+                ),
+                Divider(height: 1, color: c.border),
+                for (var i = 0; i < rows.length; i++)
+                  _row(context, c, rows[i], i + 1, i < rows.length - 1),
               ],
             ),
           ),
@@ -107,7 +134,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     );
   }
 
-  Widget _row(BuildContext context, AppColors c, AbsenceRow r, bool showDivider) {
+  Widget _row(BuildContext context, AppColors c, AbsenceRow r, int number, bool showDivider) {
     final col = subjectColor(r.subjectId);
     final rc = r.isLate ? c.accent : (r.isIll ? c.amber : c.red);
     final d = DateTime.tryParse(r.date.length <= 10 ? '${r.date}T00:00:00' : r.date);
@@ -116,6 +143,11 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
       decoration: showDivider ? BoxDecoration(border: Border(bottom: BorderSide(color: c.border))) : null,
       child: Row(
         children: [
+          // Qator raqami (№).
+          SizedBox(
+            width: 22,
+            child: Text('$number', style: TextStyle(fontSize: 12, color: c.faint)),
+          ),
           SizedBox(
             width: 46,
             child: Column(

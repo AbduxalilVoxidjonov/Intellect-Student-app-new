@@ -1213,7 +1213,8 @@ class StudentCurriculum {
         estLessonsLeft: _i(j['estLessonsLeft']),
         lessonsPerWeek: _i(j['lessonsPerWeek']),
         estFinishDate: _s(j['estFinishDate']),
-        levels: _list(j['levels'], CurriculumLevel.fromJson),
+        // Server `modules` deb qaytaradi (GroupCurriculumDto.Modules); `levels` — eski nom.
+        levels: _list(j['levels'] ?? j['modules'], CurriculumLevel.fromJson),
       );
 }
 
@@ -1330,6 +1331,10 @@ class LessonContent {
   final List<LessonVocab> vocab;
   final List<LessonQuestion> questions;
 
+  /// Interaktiv mashq (topshiriq konstruktorida yaratilgan) — tur va JSON mazmun.
+  final String exerciseKind;
+  final String exerciseJson;
+
   LessonContent({
     required this.id,
     required this.topicId,
@@ -1345,6 +1350,8 @@ class LessonContent {
     required this.meta,
     required this.vocab,
     required this.questions,
+    this.exerciseKind = '',
+    this.exerciseJson = '',
   });
 
   factory LessonContent.fromJson(Map<String, dynamic> j) => LessonContent(
@@ -1362,6 +1369,8 @@ class LessonContent {
         meta: _s(j['meta']),
         vocab: _list(j['vocab'], LessonVocab.fromJson),
         questions: _list(j['questions'], LessonQuestion.fromJson),
+        exerciseKind: _s(j['exerciseKind']),
+        exerciseJson: _s(j['exerciseJson']),
       );
 }
 
@@ -1762,5 +1771,464 @@ class StudentTestResult {
         score: _dn(j['score']),
         rank: _i(j['rank']),
         total: _i(j['total']),
+      );
+}
+
+// ---------- AI tekshiruv (Speaking / Writing) — web: types/index.ts `AiCheck*` ----------
+
+/// Mezonlar bo'yicha ballar (0-100).
+class AiCheckScores {
+  final double grammar;
+  final double vocabulary;
+  final double coherence;
+  final double task;
+  final double mechanics;
+  final double pronunciation;
+  final double fluency;
+
+  AiCheckScores({
+    required this.grammar,
+    required this.vocabulary,
+    required this.coherence,
+    required this.task,
+    required this.mechanics,
+    required this.pronunciation,
+    required this.fluency,
+  });
+
+  factory AiCheckScores.fromJson(Map<String, dynamic> j) => AiCheckScores(
+        grammar: _d(j['grammar']),
+        vocabulary: _d(j['vocabulary']),
+        coherence: _d(j['coherence']),
+        task: _d(j['task']),
+        mechanics: _d(j['mechanics']),
+        pronunciation: _d(j['pronunciation']),
+        fluency: _d(j['fluency']),
+      );
+}
+
+/// Bitta tuzatish: asl → taklif + izoh.
+class AiCorrection {
+  final String original;
+  final String suggestion;
+  final String explanation;
+
+  AiCorrection({required this.original, required this.suggestion, required this.explanation});
+
+  factory AiCorrection.fromJson(Map<String, dynamic> j) => AiCorrection(
+        original: _s(j['original']),
+        suggestion: _s(j['suggestion']),
+        explanation: _s(j['explanation']),
+      );
+}
+
+/// So'z boyligi tavsiyasi.
+class AiVocab {
+  final String word;
+  final String suggestion;
+  final String note;
+
+  AiVocab({required this.word, required this.suggestion, required this.note});
+
+  factory AiVocab.fromJson(Map<String, dynamic> j) => AiVocab(
+        word: _s(j['word']),
+        suggestion: _s(j['suggestion']),
+        note: _s(j['note']),
+      );
+}
+
+/// IELTS Writing band bahosi (0-9).
+class AiCheckIelts {
+  final double task;
+  final double coherence;
+  final double lexical;
+  final double grammar;
+  final double overall;
+  final String taskType;
+
+  AiCheckIelts({
+    required this.task,
+    required this.coherence,
+    required this.lexical,
+    required this.grammar,
+    required this.overall,
+    required this.taskType,
+  });
+
+  factory AiCheckIelts.fromJson(Map<String, dynamic> j) => AiCheckIelts(
+        task: _d(j['task']),
+        coherence: _d(j['coherence']),
+        lexical: _d(j['lexical']),
+        grammar: _d(j['grammar']),
+        overall: _d(j['overall']),
+        taskType: _s(j['taskType']),
+      );
+}
+
+/// Gemini matn tahlili.
+class AiCheckAnalysis {
+  final double overall;
+  final String level;
+  final AiCheckScores scores;
+  final String summary;
+  final List<String> strengths;
+  final List<String> weaknesses;
+  final List<AiCorrection> corrections;
+  final List<AiVocab> vocabulary;
+  final String improved;
+  final List<String> recommendations;
+  final AiCheckIelts? ielts;
+
+  AiCheckAnalysis({
+    required this.overall,
+    required this.level,
+    required this.scores,
+    required this.summary,
+    required this.strengths,
+    required this.weaknesses,
+    required this.corrections,
+    required this.vocabulary,
+    required this.improved,
+    required this.recommendations,
+    this.ielts,
+  });
+
+  factory AiCheckAnalysis.fromJson(Map<String, dynamic> j) => AiCheckAnalysis(
+        overall: _d(j['overall']),
+        level: _s(j['level']),
+        scores: AiCheckScores.fromJson(_map(j['scores'])),
+        summary: _s(j['summary']),
+        strengths: _strList(j['strengths']),
+        weaknesses: _strList(j['weaknesses']),
+        corrections: _list(j['corrections'], AiCorrection.fromJson),
+        vocabulary: _list(j['vocabulary'], AiVocab.fromJson),
+        improved: _s(j['improved']),
+        recommendations: _strList(j['recommendations']),
+        ielts: j['ielts'] == null ? null : AiCheckIelts.fromJson(_map(j['ielts'])),
+      );
+}
+
+/// Azure talaffuz natijasi (AI tekshiruv yozuvi ichida).
+class AiCheckSpeech {
+  final String recognizedText;
+  final double pronScore;
+  final double accuracy;
+  final double fluency;
+  final double completeness;
+  final double prosody;
+  final List<SpeakingWord> words;
+
+  AiCheckSpeech({
+    required this.recognizedText,
+    required this.pronScore,
+    required this.accuracy,
+    required this.fluency,
+    required this.completeness,
+    required this.prosody,
+    required this.words,
+  });
+
+  factory AiCheckSpeech.fromJson(Map<String, dynamic> j) => AiCheckSpeech(
+        recognizedText: _s(j['recognizedText']),
+        pronScore: _d(j['pronScore']),
+        accuracy: _d(j['accuracy']),
+        fluency: _d(j['fluency']),
+        completeness: _d(j['completeness']),
+        prosody: _d(j['prosody']),
+        words: _list(j['words'], SpeakingWord.fromJson),
+      );
+}
+
+/// To'liq AI tekshiruv yozuvi. type: 'speaking' | 'writing'.
+class AiCheck {
+  final String id;
+  final String type;
+  final String prompt;
+  final String inputText;
+  final String recognizedText;
+  final String audioUrl;
+  final double score;
+  final String date;
+  final String createdAt;
+  final AiCheckAnalysis? analysis;
+  final AiCheckSpeech? speech;
+  final String taskType;
+
+  AiCheck({
+    required this.id,
+    required this.type,
+    required this.prompt,
+    required this.inputText,
+    required this.recognizedText,
+    required this.audioUrl,
+    required this.score,
+    required this.date,
+    required this.createdAt,
+    this.analysis,
+    this.speech,
+    required this.taskType,
+  });
+
+  factory AiCheck.fromJson(Map<String, dynamic> j) => AiCheck(
+        id: _s(j['id']),
+        type: _s(j['type']),
+        prompt: _s(j['prompt']),
+        inputText: _s(j['inputText']),
+        recognizedText: _s(j['recognizedText']),
+        audioUrl: _s(j['audioUrl']),
+        score: _d(j['score']),
+        date: _s(j['date']),
+        createdAt: _s(j['createdAt']),
+        analysis: j['analysis'] == null ? null : AiCheckAnalysis.fromJson(_map(j['analysis'])),
+        speech: j['speech'] == null ? null : AiCheckSpeech.fromJson(_map(j['speech'])),
+        taskType: _s(j['taskType']),
+      );
+}
+
+/// AI tekshiruv tarixidagi qator.
+class AiCheckListItem {
+  final String id;
+  final String type;
+  final String prompt;
+  final double score;
+  final String date;
+  final String createdAt;
+  final bool hasAudio;
+
+  AiCheckListItem({
+    required this.id,
+    required this.type,
+    required this.prompt,
+    required this.score,
+    required this.date,
+    required this.createdAt,
+    required this.hasAudio,
+  });
+
+  factory AiCheckListItem.fromJson(Map<String, dynamic> j) => AiCheckListItem(
+        id: _s(j['id']),
+        type: _s(j['type']),
+        prompt: _s(j['prompt']),
+        score: _d(j['score']),
+        date: _s(j['date']),
+        createdAt: _s(j['createdAt']),
+        hasAudio: _b(j['hasAudio']),
+      );
+}
+
+/// AI tekshiruv holati: kalitlar tayyorligi + limit/premium/blok.
+class AiCheckStatus {
+  final bool geminiReady;
+  final bool azureReady;
+  final bool premium;
+  final bool blocked;
+  final int limit;
+  final int usedToday;
+  final int remaining;
+
+  AiCheckStatus({
+    required this.geminiReady,
+    required this.azureReady,
+    required this.premium,
+    required this.blocked,
+    required this.limit,
+    required this.usedToday,
+    required this.remaining,
+  });
+
+  factory AiCheckStatus.fromJson(Map<String, dynamic> j) => AiCheckStatus(
+        geminiReady: _b(j['geminiReady']),
+        azureReady: _b(j['azureReady']),
+        premium: _b(j['premium']),
+        blocked: _b(j['blocked']),
+        limit: _i(j['limit']),
+        usedToday: _i(j['usedToday']),
+        remaining: _i(j['remaining']),
+      );
+}
+
+// ---------- Dars topshirig'i urinishi (natija saqlanishi) — web: `AttemptPayload` ----------
+
+/// Bitta savol/element bo'yicha javob (serverda AnswersJson ichida saqlanadi).
+class AttemptAnswer {
+  final int index;
+  final String prompt;
+  final String answer;
+  final String expected;
+  final bool ok;
+  final int sec;
+
+  AttemptAnswer({
+    required this.index,
+    required this.prompt,
+    required this.answer,
+    required this.expected,
+    required this.ok,
+    required this.sec,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'index': index,
+        'prompt': prompt,
+        'answer': answer,
+        'expected': expected,
+        'ok': ok,
+        'sec': sec,
+      };
+}
+
+/// Support (yordam darsi) bo'sh sloti. Web: `StudentSupportTeacher['openSlots'][number]`.
+class StudentSupportSlot {
+  final String id;
+  final String date;
+  final String startTime;
+  final String endTime;
+
+  StudentSupportSlot({
+    required this.id,
+    required this.date,
+    required this.startTime,
+    required this.endTime,
+  });
+
+  factory StudentSupportSlot.fromJson(Map<String, dynamic> j) => StudentSupportSlot(
+        id: _s(j['id']),
+        date: _s(j['date']),
+        startTime: _s(j['startTime']),
+        endTime: _s(j['endTime']),
+      );
+}
+
+/// Support o'qituvchi + bo'sh slotlari. Web: `StudentSupportTeacher`.
+class StudentSupportTeacher {
+  final String teacherId;
+  final String fullName;
+  final String? photoUrl;
+  final String subject;
+  final List<StudentSupportSlot> openSlots;
+
+  StudentSupportTeacher({
+    required this.teacherId,
+    required this.fullName,
+    this.photoUrl,
+    required this.subject,
+    required this.openSlots,
+  });
+
+  factory StudentSupportTeacher.fromJson(Map<String, dynamic> j) => StudentSupportTeacher(
+        teacherId: _s(j['teacherId']),
+        fullName: _s(j['fullName']),
+        photoUrl: _sn(j['photoUrl']),
+        subject: _s(j['subject']),
+        openSlots: _list(j['openSlots'], StudentSupportSlot.fromJson),
+      );
+}
+
+/// O'quvchining support broni. Web: `StudentSupportBooking`.
+class StudentSupportBooking {
+  final String id;
+  final String teacherId;
+  final String teacherName;
+  final String date;
+  final String startTime;
+  final String endTime;
+  final String status; // open | booked | done
+  final String topic;
+  final String notes;
+
+  StudentSupportBooking({
+    required this.id,
+    required this.teacherId,
+    required this.teacherName,
+    required this.date,
+    required this.startTime,
+    required this.endTime,
+    required this.status,
+    required this.topic,
+    required this.notes,
+  });
+
+  factory StudentSupportBooking.fromJson(Map<String, dynamic> j) => StudentSupportBooking(
+        id: _s(j['id']),
+        teacherId: _s(j['teacherId']),
+        teacherName: _s(j['teacherName']),
+        date: _s(j['date']),
+        startTime: _s(j['startTime']),
+        endTime: _s(j['endTime']),
+        status: _s(j['status']),
+        topic: _s(j['topic']),
+        notes: _s(j['notes']),
+      );
+}
+
+/// Support ekrani ma'lumoti: bo'sh slotli o'qituvchilar + mening bronlarim. Web: `StudentSupport`.
+class StudentSupport {
+  final List<StudentSupportTeacher> supports;
+  final List<StudentSupportBooking> myBookings;
+
+  StudentSupport({required this.supports, required this.myBookings});
+
+  factory StudentSupport.fromJson(Map<String, dynamic> j) => StudentSupport(
+        supports: _list(j['supports'], StudentSupportTeacher.fromJson),
+        myBookings: _list(j['myBookings'], StudentSupportBooking.fromJson),
+      );
+}
+
+// ---------- Shartnoma (elektron nusxa) — web: `ContractDoc` ----------
+
+/// Markaz o'quvchi/ota-ona bilan tuzgan shartnomaning saqlangan nusxasi.
+/// `signedUrl` — imzolangan skan (bo'lsa u ustun), `pdfUrl` — tizim hosil qilgan PDF.
+class ContractDoc {
+  final String id;
+  final int number;
+  final String title;
+  final String target;
+  final String recipientKey;
+  final String recipientName;
+  final String templateName;
+  final String date;
+  final String pdfUrl;
+  final String docxUrl;
+  final String signedUrl;
+  final bool signed;
+  final bool delivered;
+  final String status;
+
+  ContractDoc({
+    required this.id,
+    required this.number,
+    required this.title,
+    required this.target,
+    required this.recipientKey,
+    required this.recipientName,
+    required this.templateName,
+    required this.date,
+    required this.pdfUrl,
+    required this.docxUrl,
+    required this.signedUrl,
+    required this.signed,
+    required this.delivered,
+    required this.status,
+  });
+
+  /// Ochish uchun manzil — imzolangan nusxa bo'lsa o'sha, aks holda PDF.
+  String get fileUrl => signed && signedUrl.isNotEmpty ? signedUrl : pdfUrl;
+  bool get hasFile => fileUrl.isNotEmpty;
+
+  factory ContractDoc.fromJson(Map<String, dynamic> j) => ContractDoc(
+        id: _s(j['id']),
+        number: _i(j['number']),
+        title: _s(j['title']),
+        target: _s(j['target']),
+        recipientKey: _s(j['recipientKey']),
+        recipientName: _s(j['recipientName']),
+        templateName: _s(j['templateName']),
+        date: _s(j['date']),
+        pdfUrl: _s(j['pdfUrl']),
+        docxUrl: _s(j['docxUrl']),
+        signedUrl: _s(j['signedUrl']),
+        signed: _b(j['signed']),
+        delivered: _b(j['delivered']),
+        status: _s(j['status']),
       );
 }
