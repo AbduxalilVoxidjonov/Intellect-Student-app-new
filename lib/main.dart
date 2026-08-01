@@ -22,7 +22,7 @@ class StudentApp extends StatelessWidget {
     final session = context.watch<Session>();
     final colors = session.isDark ? AppColors.dark : AppColors.light;
     return MaterialApp(
-      title: "O'quvchi",
+      title: 'Intellect Student',
       debugShowCheckedModeBanner: false,
       theme: buildMaterialTheme(colors),
       // AppTheme'ni Navigator ustida joylashtiramiz — barcha push qilingan
@@ -35,14 +35,21 @@ class StudentApp extends StatelessWidget {
   }
 }
 
+/// Sessiya o'qilayotgandagi ekran. Native splash (logo + ko'k fon) bilan AYNAN bir xil
+/// ko'rinadi — shu sabab ilova ochilganda ekran o'zgarib "sakramaydi".
 class _Splash extends StatelessWidget {
   const _Splash();
   @override
   Widget build(BuildContext context) {
-    final c = AppTheme.of(context);
-    return Scaffold(
-      backgroundColor: c.bg,
-      body: Center(child: CircularProgressIndicator(color: c.accent)),
+    return const Scaffold(
+      backgroundColor: kBrandBlue,
+      body: Center(
+        child: SizedBox(
+          width: 150,
+          height: 150,
+          child: Image(image: AssetImage('assets/logo.png'), fit: BoxFit.contain),
+        ),
+      ),
     );
   }
 }

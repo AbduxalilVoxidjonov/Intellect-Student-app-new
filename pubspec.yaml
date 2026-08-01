@@ -44,6 +44,8 @@ dependencies:
   url_launcher: ^6.3.2
   image_picker: ^1.1.2
   permission_handler: ^11.3.1
+  # Sertifikat/hujjatni qurilmaga saqlash uchun (bog'liqliklar orqali allaqachon yechilgan).
+  path_provider: ^2.1.6
   flutter_map: ^8.3.1
   latlong2: ^0.10.1
   geolocator: ^14.0.3
@@ -58,6 +60,53 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
+  # Ilova ikonkasi va ochilish (splash) ekranini logodan generatsiya qiladi.
+  # Qayta yaratish (logo o'zgarsa):
+  #   dart run flutter_launcher_icons
+  #   dart run flutter_native_splash:create
+  flutter_launcher_icons: ^0.14.4
+  flutter_native_splash: ^2.4.6
+
+# ---------------------------------------------------------------------------
+# ILOVA IKONKASI — Intellect Kokand logosi.
+# Manba: assets/logo.png (to'liq kvadrat logo) — legacy Android va iOS ikonkasi.
+# Adaptive ikonka (Android 8+) doira/squircle niqob qo'llaydi (ko'rinadigan qism —
+# markazdagi 66%). DIQQAT: flutter_launcher_icons foreground'ga O'ZI 16% inset
+# qo'shadi (mipmap-anydpi-v26/ic_launcher.xml), shuning uchun bu yerda TO'LDIRILMAGAN
+# (to'liq kvadrat) logo beriladi — 100% × 68% ≈ 68%, ya'ni xavfsiz zonaga tushadi.
+# Oldindan to'ldirilgan rasm berilsa ikkita to'ldirish qo'shilib, logo juda kichrayadi.
+# Fon — logoning o'z rangi, shu sabab kvadrat chetlari umuman ko'rinmaydi.
+# ---------------------------------------------------------------------------
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/logo.png"
+  min_sdk_android: 21
+  adaptive_icon_background: "#020066"
+  adaptive_icon_foreground: "assets/logo.png"
+  # iOS ikonkasida shaffoflik BO'LMASLIGI kerak (App Store talabi).
+  remove_alpha_ios: true
+
+# ---------------------------------------------------------------------------
+# OCHILISH EKRANI (native splash) — ilova ishga tushganda logo ko'rinadi.
+# Fon logoning o'z ko'k rangi; rasm shaffof foreground (66%) — Android 12+ da
+# splash ikonkasi ham doiraga niqoblanadi, shuning uchun bir xil xavfsiz zona.
+# ---------------------------------------------------------------------------
+flutter_native_splash:
+  color: "#020066"
+  color_dark: "#020066"
+  image: assets/logo_foreground.png
+  image_dark: assets/logo_foreground.png
+  android: true
+  ios: true
+  web: false
+  android_12:
+    color: "#020066"
+    color_dark: "#020066"
+    image: assets/logo_foreground.png
+    image_dark: assets/logo_foreground.png
+    icon_background_color: "#020066"
+    icon_background_color_dark: "#020066"
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -70,10 +119,8 @@ flutter:
   # the material Icons class.
   uses-material-design: true
 
-  # To add assets to your application, add an assets section, like this:
-  # assets:
-  #   - images/a_dot_burr.jpeg
-  #   - images/a_dot_ham.jpeg
+  assets:
+    - assets/logo.png
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

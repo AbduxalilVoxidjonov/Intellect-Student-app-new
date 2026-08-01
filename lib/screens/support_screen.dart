@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../api/student_api.dart';
+import '../config.dart';
 import '../models/models.dart';
 import '../theme/app_theme.dart';
 import '../utils/format.dart';
@@ -38,14 +39,24 @@ class _SupportScreenState extends State<SupportScreen> {
     }
   }
 
+  /// Xatoni foydalanuvchiga ko'rsatamiz — aks holda tugma bosiladi-yu, hech nima o'zgarmaydi
+  /// (masalan slotni boshqa o'quvchi band qilib ulgurgan).
+  void _toast(Object e) {
+    if (!mounted) return;
+    final msg = e.toString().replaceFirst(RegExp(r'^Exception:\s*'), '').trim();
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(msg.isEmpty ? 'Amal bajarilmadi' : msg)));
+  }
+
   Future<void> _book(String id) async {
     if (_busyId != null) return;
     setState(() => _busyId = id);
     try {
       await StudentApi.bookSupportSlot(id);
       await _load();
-    } catch (_) {
-      // e'tibor bermaymiz
+    } catch (e) {
+      _toast(e);
     } finally {
       if (mounted) setState(() => _busyId = null);
     }
@@ -57,8 +68,8 @@ class _SupportScreenState extends State<SupportScreen> {
     try {
       await StudentApi.cancelSupportSlot(id);
       await _load();
-    } catch (_) {
-      // e'tibor bermaymiz
+    } catch (e) {
+      _toast(e);
     } finally {
       if (mounted) setState(() => _busyId = null);
     }
@@ -355,7 +366,8 @@ class _TeacherAvatar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = AppTheme.of(context);
-    final url = t.photoUrl;
+    // Nisbiy "/uploads/.." manzilni bazaga ulaymiz (aks holda rasm yuklanmaydi).
+    final url = absFileUrl(t.photoUrl);
     return Container(
       width: 44,
       height: 44,
@@ -363,11 +375,11 @@ class _TeacherAvatar extends StatelessWidget {
       decoration: BoxDecoration(
         color: c.accentSoft,
         borderRadius: BorderRadius.circular(14),
-        image: (url != null && url.isNotEmpty)
+        image: url != null
             ? DecorationImage(image: NetworkImage(url), fit: BoxFit.cover)
             : null,
       ),
-      child: (url == null || url.isEmpty)
+      child: url == null
           ? Text(initials(t.fullName),
               style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: c.accent))
           : null,

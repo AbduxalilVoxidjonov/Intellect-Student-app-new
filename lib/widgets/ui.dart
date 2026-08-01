@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import '../config.dart';
 import '../theme/app_theme.dart';
 import '../utils/format.dart';
 
@@ -240,6 +241,8 @@ class Avatar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = AppTheme.of(context);
+    // Server nisbiy yo'l ("/uploads/..") qaytaradi — bazaga ulamasak rasm yuklanmaydi.
+    final url = absFileUrl(imageUrl);
     return Container(
       width: size,
       height: size,
@@ -251,11 +254,11 @@ class Avatar extends StatelessWidget {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
-        image: (imageUrl != null && imageUrl!.isNotEmpty)
-            ? DecorationImage(image: NetworkImage(imageUrl!), fit: BoxFit.cover)
+        image: url != null
+            ? DecorationImage(image: NetworkImage(url), fit: BoxFit.cover)
             : null,
       ),
-      child: (imageUrl == null || imageUrl!.isEmpty)
+      child: url == null
           ? Text(initials(name),
               style: TextStyle(color: Colors.white, fontSize: size * 0.38, fontWeight: FontWeight.w700))
           : null,

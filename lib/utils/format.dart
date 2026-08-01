@@ -9,6 +9,8 @@ const _months = [
 const _weekdays = [
   'Dushanba', 'Seshanba', 'Chorshanba', 'Payshanba', 'Juma', 'Shanba', 'Yakshanba',
 ];
+/// Qisqartma — indeks `_weekdays` bilan bir xil (0=Dushanba). Guruh jadvalida ishlatiladi.
+const _weekdaysShort = ['Du', 'Se', 'Chor', 'Pay', 'Ju', 'Shan', 'Yak'];
 
 /// Bahoga qarab rang — baho qancha yuqori bo'lsa, yashil shuncha to'q.
 Color gradeColor(num g) {
@@ -90,3 +92,11 @@ String fmtTime(String? iso) {
 
 List<String> get monthsUz => _months;
 List<String> get weekdaysUz => _weekdays;
+List<String> get weekdaysShortUz => _weekdaysShort;
+
+/// Guruh dars kunlari (0=Dushanba…6=Yakshanba) → "Du, Chor, Ju".
+/// Noto'g'ri indekslar e'tiborsiz qoldiriladi.
+String fmtDays(List<int> days) => days
+    .where((d) => d >= 0 && d < _weekdaysShort.length)
+    .map((d) => _weekdaysShort[d])
+    .join(', ');

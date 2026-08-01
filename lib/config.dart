@@ -9,3 +9,17 @@ const String kApiBaseUrl = 'https://crm.intellectschool.uz/api';
 const String kFileBaseUrl = 'https://crm.intellectschool.uz';
 
 const String kAppVersion = 'v1.0.0';
+
+/// Markaz nomi — kirish ekrani va "ilova haqida" qatorlarida ko'rsatiladi.
+/// YAGONA joy: ekranlarda qo'lda yozilmasin (ilgari uchta ekranda alohida yozilib, ajralib qolgan).
+const String kBrandName = 'Intellect Kokand';
+
+/// Server qaytaradigan fayl/rasm manzillari NISBIY ("/uploads/...") bo'ladi —
+/// web'da bu ishlaydi (bir xil origin), ilovada esa bazaga ulash SHART.
+/// Bo'sh yoki allaqachon to'liq (http/https/data:) bo'lsa o'zgarishsiz qaytadi.
+String? absFileUrl(String? url) {
+  final u = url?.trim() ?? '';
+  if (u.isEmpty) return null;
+  if (u.startsWith('http://') || u.startsWith('https://') || u.startsWith('data:')) return u;
+  return u.startsWith('/') ? '$kFileBaseUrl$u' : '$kFileBaseUrl/$u';
+}

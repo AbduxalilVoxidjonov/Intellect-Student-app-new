@@ -44,6 +44,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
   int _certCount = 0;
   bool _loading = true;
 
+  /// Guruhlar alohida endpointdan (`/student/groups`).
+  List<StudentGroupInfo>? _groups;
+
   // Menyu bandlari va tartibi web Profile.tsx'dagi MENU bilan aynan bir xil.
   late final List<_MenuEntry> _menu = [
     _MenuEntry(Icons.grid_view_rounded, 'Umumiy statistika', const Color(0xFF1B7A66), (_) => const StatisticsScreen()),
@@ -87,6 +90,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
       try {
         final certs = await StudentApi.certificates();
         if (mounted) setState(() => _certCount = certs.length);
+      } catch (_) {}
+      try {
+        final g = await StudentApi.groups();
+        if (mounted) setState(() => _groups = g);
       } catch (_) {}
     } catch (_) {
       // dashboard o'zi muvaffaqiyatsiz — profil bo'sh ko'rinadi
@@ -158,7 +165,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final p = _dash?.profile;
     final session = context.watch<Session>();
     final fullName = (p?.fullName.isNotEmpty ?? false) ? p!.fullName : session.fullName;
-    final className = p?.className ?? '';
+    // Guruh(lar) `/student/groups` dan — bu yerda faqat HOZIRGI (tugamagan) guruhlar.
+    final groups = (_groups ?? const <StudentGroupInfo>[]).where((g) => g.isCurrent).toList();
+    final groupLine = groups.map((g) => g.name).join(', ');
+    final groupShort = groups.length > 1 ? '${groups.length} ta guruh' : groupLine;
     final birth = (p?.birthDate.isNotEmpty ?? false) ? fmtDate(p!.birthDate) : '';
     final enroll = (p?.enrollmentDate.isNotEmpty ?? false) ? fmtDate(p!.enrollmentDate) : '';
     final gender = p?.gender == 'male' ? "O'g'il bola" : (p?.gender == 'female' ? 'Qiz bola' : '');
@@ -185,10 +195,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       Text(fullName.isEmpty ? "O'quvchi" : fullName,
                           textAlign: TextAlign.center,
                           style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: c.text, letterSpacing: -0.3)),
-                      if (className.isNotEmpty)
+                      if (groupLine.isNotEmpty)
                         Padding(
                           padding: const EdgeInsets.only(top: 2),
-                          child: Text('$className guruhi', style: TextStyle(fontSize: 13.5, color: c.muted)),
+                          child: Text(groups.length > 1 ? groupLine : '$groupLine guruhi',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(fontSize: 13.5, color: c.muted)),
                         ),
                       if (_schoolName.isNotEmpty)
                         Padding(
@@ -215,7 +227,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           const SizedBox(width: 24),
                           Flexible(
                             child: _MiniStat(
-                                value: className.isNotEmpty ? className : '—',
+                                value: groupShort.isNotEmpty ? groupShort : '—',
                                 label: 'Guruh',
                                 color: c.text),
                           ),
@@ -300,7 +312,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 SButton('Chiqish', icon: Icons.logout_rounded, kind: BtnKind.danger, large: true, onTap: _confirmLogout),
                 const SizedBox(height: 12),
                 Center(
-                  child: Text('Intellect School · $kAppVersion',
+                  child: Text('$kBrandName · $kAppVersion',
                       style: TextStyle(fontSize: 12, color: c.faint)),
                 ),
               ],

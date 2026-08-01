@@ -4,9 +4,12 @@ import '../../models/models.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/format.dart';
 import '../../widgets/ui.dart';
+import '../online_test_screen.dart';
 
-/// O'quvchi ilovasi — Test tab. O'qituvchi kiritgan test natijalarini (ball,
-/// guruh reytingidagi o'rin) ko'rsatadi. Faqat ko'rish — kiritish yo'q.
+/// O'quvchi ilovasi — Test tab.
+///  • **Onlayn testlar** — CRM'da (admin/o'qituvchi) yaratilgan, PDF savolli testlar:
+///    shu yerdan ochib, javoblarni ilovada kiritish mumkin (Telegram bot bilan bir xil).
+///  • **Natijalar** — o'qituvchi kiritgan yoki avtomatik hisoblangan ballar (o'rin bilan).
 class TestsScreen extends StatefulWidget {
   const TestsScreen({super.key});
   @override
@@ -14,6 +17,7 @@ class TestsScreen extends StatefulWidget {
 }
 
 class _TestsScreenState extends State<TestsScreen> {
+  List<OnlineTest> _online = const [];
   List<StudentTestResult>? _results;
   bool _loading = true;
   bool _error = false;
@@ -25,10 +29,19 @@ class _TestsScreenState extends State<TestsScreen> {
   }
 
   Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = false;
-    });
+    if (mounted) {
+      setState(() {
+        _loading = true;
+        _error = false;
+      });
+    }
+    // Ikkalasi mustaqil — biri ishlamasa ikkinchisi baribir ko'rinadi.
+    try {
+      final o = await StudentApi.onlineTests();
+      if (mounted) setState(() => _online = o);
+    } catch (_) {
+      if (mounted) setState(() => _online = const []);
+    }
     try {
       final r = await StudentApi.testResults();
       if (!mounted) return;
@@ -45,10 +58,17 @@ class _TestsScreenState extends State<TestsScreen> {
     }
   }
 
+  Future<void> _openTest(OnlineTest t) async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(builder: (_) => OnlineTestScreen(testId: t.id, title: t.name)),
+    );
+    // Test topshirilgan bo'lishi mumkin — ro'yxat va natijalarni yangilaymiz.
+    await _load();
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = AppTheme.of(context);
-    final results = _results;
 
     return Column(
       children: [
@@ -56,7 +76,7 @@ class _TestsScreenState extends State<TestsScreen> {
           'Testlar',
           subtitle: Padding(
             padding: const EdgeInsets.only(top: 2),
-            child: Text("Guruh testlari natijalari",
+            child: Text('Onlayn testlar va natijalar',
                 style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: c.muted)),
           ),
         ),
@@ -65,42 +85,125 @@ class _TestsScreenState extends State<TestsScreen> {
             onRefresh: _load,
             color: c.accent,
             child: _loading
-                ? ListView(
-                    children: const [
-                      SizedBox(height: 220),
-                      Loader(),
-                    ],
-                  )
-                : (_error || results == null)
-                    ? ListView(
-                        children: [
-                          const SizedBox(height: 140),
-                          const EmptyState(
-                            icon: Icons.wifi_off_rounded,
-                            text: "Ma'lumotlarni yuklab bo'lmadi.\nQuyiga torting va qayta urinib ko'ring.",
-                          ),
-                        ],
-                      )
-                    : results.isEmpty
-                        ? ListView(
-                            children: const [
-                              SizedBox(height: 140),
-                              EmptyState(
-                                icon: Icons.fact_check_outlined,
-                                text: "Hozircha test natijasi yo'q.\n"
-                                    "O'qituvchi test natijasini kiritganda shu yerda ko'rinadi.",
-                              ),
-                            ],
-                          )
-                        : ListView.separated(
-                            padding: const EdgeInsets.fromLTRB(16, 4, 16, 28),
-                            itemCount: results.length,
-                            separatorBuilder: (_, _) => const SizedBox(height: 10),
-                            itemBuilder: (_, i) => _TestCard(item: results[i]),
-                          ),
+                ? ListView(children: const [SizedBox(height: 220), Loader()])
+                : _body(c),
           ),
         ),
       ],
+    );
+  }
+
+  Widget _body(AppColors c) {
+    final results = _results;
+    final hasOnline = _online.isNotEmpty;
+    final hasResults = results != null && results.isNotEmpty;
+
+    if (!hasOnline && !hasResults) {
+      return ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        children: [
+          const SizedBox(height: 140),
+          EmptyState(
+            icon: _error ? Icons.wifi_off_rounded : Icons.fact_check_outlined,
+            text: _error
+                ? "Ma'lumotlarni yuklab bo'lmadi.\nQuyiga torting va qayta urinib ko'ring."
+                : "Hozircha test yo'q.\n"
+                    "O'qituvchi test yaratganda yoki natija kiritganda shu yerda ko'rinadi.",
+          ),
+        ],
+      );
+    }
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 28),
+      physics: const AlwaysScrollableScrollPhysics(),
+      children: [
+        if (hasOnline) ...[
+          const SectionTitle('Onlayn testlar'),
+          for (final t in _online)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: _OnlineTestCard(item: t, onTap: () => _openTest(t)),
+            ),
+          const SizedBox(height: 8),
+        ],
+        const SectionTitle('Natijalar'),
+        if (!hasResults)
+          const SCard(
+            child: EmptyState(icon: Icons.fact_check_outlined, text: "Hozircha natija yo'q."),
+          )
+        else
+          for (final r in results)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: _TestCard(item: r),
+            ),
+      ],
+    );
+  }
+}
+
+/// Onlayn test kartasi — holat (ochiq/topshirilgan/…) va qisqa ma'lumot.
+class _OnlineTestCard extends StatelessWidget {
+  final OnlineTest item;
+  final VoidCallback onTap;
+  const _OnlineTestCard({required this.item, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = AppTheme.of(context);
+    final (label, color, icon) = switch (item.state) {
+      'open' => ('Ochiq — ishlash mumkin', c.green, Icons.play_circle_fill_rounded),
+      'submitted' => ('Topshirilgan', c.accent, Icons.check_circle_rounded),
+      'upcoming' => ('Hali boshlanmagan', c.amber, Icons.schedule_rounded),
+      _ => ('Vaqti tugagan', c.faint, Icons.lock_clock_rounded),
+    };
+    final correct = item.score?.round();
+
+    return SCard(
+      onTap: onTap,
+      child: Row(
+        children: [
+          Container(
+            width: 44,
+            height: 44,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(color: color.withValues(alpha: 0.13), borderRadius: BorderRadius.circular(13)),
+            child: Icon(icon, size: 22, color: color),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(item.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w800, color: c.text)),
+                const SizedBox(height: 2),
+                Text(
+                  [
+                    if (item.groupName.isNotEmpty) item.groupName,
+                    '${item.questionCount} savol',
+                    fmtDate(item.date),
+                  ].join(' · '),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 12, color: c.muted),
+                ),
+                const SizedBox(height: 5),
+                Text(
+                  item.isSubmitted && correct != null
+                      ? "$label · $correct/${item.questionCount} to'g'ri"
+                      : label,
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: color),
+                ),
+              ],
+            ),
+          ),
+          Icon(Icons.chevron_right_rounded, size: 20, color: c.faint),
+        ],
+      ),
     );
   }
 }
@@ -156,9 +259,7 @@ class _TestCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Text(
-                hasScore
-                    ? '${item.score! % 1 == 0 ? item.score!.toInt() : item.score}/${item.maxScore % 1 == 0 ? item.maxScore.toInt() : item.maxScore}'
-                    : '—',
+                hasScore ? '${_num(item.score!)}/${_num(item.maxScore)}' : '—',
                 style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: scoreColor),
               ),
               const SizedBox(height: 2),
@@ -177,4 +278,7 @@ class _TestCard extends StatelessWidget {
       ),
     );
   }
+
+  /// Butun sonni "8" (emas "8.0") ko'rinishida.
+  static String _num(double v) => v % 1 == 0 ? v.toInt().toString() : v.toString();
 }

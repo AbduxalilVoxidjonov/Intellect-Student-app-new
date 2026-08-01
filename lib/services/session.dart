@@ -21,7 +21,14 @@ class Session extends ChangeNotifier {
   bool get ready => _ready;
 
   String get fullName => (_user?['fullName'] as String?) ?? '';
-  String? get studentId => _user?['id'] as String?;
+
+  /// Tokendagi FOYDALANUVCHI id'si (Student.Id EMAS — parent rolida umuman boshqa yozuv).
+  /// Chatda "o'zimning xabarim"ni aniqlashda ishlatiladi; API'ga `studentId` sifatida
+  /// BERILMAYDI — server o'quvchini tokenning o'zidan aniqlaydi.
+  String? get userId => _user?['id'] as String?;
+
+  /// Rol: `student` | `parent`.
+  String get role => (_user?['role'] as String?) ?? 'student';
 
   Future<void> init() async {
     final p = await SharedPreferences.getInstance();

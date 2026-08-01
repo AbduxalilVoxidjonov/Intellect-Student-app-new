@@ -132,7 +132,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           const SizedBox(height: 8),
           Center(
-            child: Text('Intellect School · $kAppVersion',
+            child: Text('$kBrandName · $kAppVersion',
                 style: TextStyle(fontSize: 12, color: AppTheme.of(context).faint)),
           ),
         ],

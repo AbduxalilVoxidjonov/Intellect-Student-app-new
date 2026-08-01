@@ -112,6 +112,18 @@ class StudentApi {
     return (res.data as List).map((e) => StudentGradingGroup.fromJson((e as Map).cast<String, dynamic>())).toList();
   }
 
+  // ---------- Guruhlar ----------
+  /// O'quvchining guruhlari — faol ham, tugagan/chiqilgan ham (`state` bilan).
+  /// Manba: `StudentGroup` a'zoliklari; yozuv umuman bo'lmasa server `ClassName` bo'yicha
+  /// guruhni qaytaradi (eski bazalarda o'quvchi "guruhsiz" ko'rinib qolmasin).
+  static Future<List<StudentGroupInfo>> groups({String? studentId}) async {
+    final res = await ApiClient.dio.get('/student/groups', queryParameters: _sid(studentId));
+    if (!ApiClient.ok(res)) _fail(res);
+    return (res.data as List? ?? [])
+        .map((e) => StudentGroupInfo.fromJson((e as Map).cast<String, dynamic>()))
+        .toList();
+  }
+
   // ---------- Dashboard ----------
   static Future<StudentDashboard> dashboard({String? studentId}) async {
     final res = await ApiClient.dio.get('/student/dashboard', queryParameters: _sid(studentId));
@@ -175,55 +187,6 @@ class StudentApi {
     return SubjectProgressDetail.fromJson((res.data as Map).cast<String, dynamic>());
   }
 
-  // ---------- Assignments ----------
-  static Future<List<StudentAssignment>> assignments({String? studentId}) async {
-    final res = await ApiClient.dio.get('/student/assignments', queryParameters: _sid(studentId));
-    if (!ApiClient.ok(res)) _fail(res);
-    return (res.data as List).map((e) => StudentAssignment.fromJson((e as Map).cast<String, dynamic>())).toList();
-  }
-
-  static Future<StudentAssignmentDetail> assignment(String id, {String? studentId}) async {
-    final res = await ApiClient.dio.get('/student/assignments/$id', queryParameters: _sid(studentId));
-    if (!ApiClient.ok(res)) _fail(res);
-    return StudentAssignmentDetail.fromJson((res.data as Map).cast<String, dynamic>());
-  }
-
-  static Future<StudentAssignmentScores> assignmentScores({String? studentId}) async {
-    final res = await ApiClient.dio.get('/student/assignment-scores', queryParameters: _sid(studentId));
-    if (!ApiClient.ok(res)) _fail(res);
-    return StudentAssignmentScores.fromJson((res.data as Map).cast<String, dynamic>());
-  }
-
-  static Future<SubmitResult> submitAssignment(
-    String id, {
-    List<TestAnswer>? answers,
-    String? answerText,
-    String? fileUrl,
-  }) async {
-    final res = await ApiClient.dio.post('/student/assignments/$id/submit', data: {
-      if (answers != null) 'answers': answers.map((a) => a.toJson()).toList(),
-      if (answerText != null) 'answerText': answerText,
-      if (fileUrl != null) 'fileUrl': fileUrl,
-    });
-    if (!ApiClient.ok(res)) _fail(res);
-    return SubmitResult.fromJson((res.data as Map).cast<String, dynamic>());
-  }
-
-  static Future<UploadedFile> uploadFile(
-    List<int> bytes,
-    String filename, {
-    void Function(int sent, int total)? onProgress,
-  }) async {
-    final fd = FormData.fromMap({'file': MultipartFile.fromBytes(bytes, filename: filename)});
-    final res = await ApiClient.dio.post(
-      '/student/uploads',
-      data: fd,
-      onSendProgress: onProgress,
-    );
-    if (!ApiClient.ok(res)) _fail(res);
-    return UploadedFile.fromJson((res.data as Map).cast<String, dynamic>());
-  }
-
   // ---------- Finance ----------
   static Future<StudentFinance> finance({String? studentId}) async {
     final res = await ApiClient.dio.get('/student/finance', queryParameters: _sid(studentId));
@@ -273,23 +236,16 @@ class StudentApi {
         .toList();
   }
 
-  // ---------- Speaking (Azure talaffuz bahosi) ----------
-  /// Audio (WAV) yuborib, Azure talaffuz bahosini olish (natija saqlanadi).
-  static Future<SpeakingResult> submitSpeaking(String assignmentId, List<int> wavBytes) async {
-    final fd = FormData.fromMap({
-      'audio': MultipartFile.fromBytes(wavBytes, filename: 'speaking.wav'),
-    });
-    final res = await ApiClient.dio.post('/student/assignments/$assignmentId/speaking', data: fd);
-    if (!ApiClient.ok(res)) _fail(res);
-    return SpeakingResult.fromJson((res.data as Map).cast<String, dynamic>());
-  }
-
-  /// Oldingi speaking natijasi (bor bo'lsa) — 204 bo'lsa null.
-  static Future<SpeakingResult?> speaking(String assignmentId, {String? studentId}) async {
-    final res = await ApiClient.dio.get('/student/assignments/$assignmentId/speaking', queryParameters: _sid(studentId));
-    if (res.statusCode == 204 || res.data == null) return null;
-    if (!ApiClient.ok(res)) _fail(res);
-    return SpeakingResult.fromJson((res.data as Map).cast<String, dynamic>());
+  /// Sertifikat faylini baytlar ko'rinishida yuklab oladi.
+  /// DIQQAT: endpoint token talab qiladi — uni brauzerda ochib bo'lmaydi (401),
+  /// shuning uchun fayl shu klient orqali olinadi va qurilmaga saqlanadi.
+  static Future<List<int>> certificateBytes(String id) async {
+    final res = await ApiClient.dio.get<List<int>>(
+      '/student/certificates/$id/download',
+      options: Options(responseType: ResponseType.bytes),
+    );
+    if (!ApiClient.ok(res)) throw Exception("Sertifikatni yuklab bo'lmadi");
+    return res.data ?? const <int>[];
   }
 
   // ---------- Feedback ----------
@@ -391,6 +347,30 @@ class StudentApi {
     return (res.data as List)
         .map((e) => StudentTestResult.fromJson((e as Map).cast<String, dynamic>()))
         .toList();
+  }
+
+  // ---------- Onlayn test (PDF savollar + javob kiritish) ----------
+  /// O'quvchining faol guruhlaridagi onlayn testlar (yangisi tepada).
+  static Future<List<OnlineTest>> onlineTests({String? studentId}) async {
+    final res = await ApiClient.dio.get('/student/online-tests', queryParameters: _sid(studentId));
+    if (!ApiClient.ok(res)) _fail(res);
+    return (res.data as List? ?? [])
+        .map((e) => OnlineTest.fromJson((e as Map).cast<String, dynamic>()))
+        .toList();
+  }
+
+  /// Bitta test tafsiloti (o'z javoblari, o'rni; javob kaliti faqat vaqt tugagach).
+  static Future<OnlineTestDetail> onlineTest(String id, {String? studentId}) async {
+    final res = await ApiClient.dio.get('/student/online-tests/$id', queryParameters: _sid(studentId));
+    if (!ApiClient.ok(res)) _fail(res);
+    return OnlineTestDetail.fromJson((res.data as Map).cast<String, dynamic>());
+  }
+
+  /// Javoblarni yuborish ("ABCDA…", javobsiz savol — '-'). Bir marta topshiriladi.
+  static Future<OnlineTestDetail> submitOnlineTest(String id, String answers) async {
+    final res = await ApiClient.dio.post('/student/online-tests/$id/submit', data: {'answers': answers});
+    if (!ApiClient.ok(res)) _fail(res);
+    return OnlineTestDetail.fromJson((res.data as Map).cast<String, dynamic>());
   }
 
   // ---------- Support (yordam darslari) ----------

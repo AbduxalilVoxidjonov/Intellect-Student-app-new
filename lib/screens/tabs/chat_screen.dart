@@ -99,7 +99,7 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   Widget build(BuildContext context) {
     final c = AppTheme.of(context);
-    final meId = context.watch<Session>().user?['id']?.toString();
+    final meId = context.watch<Session>().userId;
 
     return Column(
       children: [

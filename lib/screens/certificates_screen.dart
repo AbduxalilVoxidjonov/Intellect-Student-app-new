@@ -1,6 +1,9 @@
+import 'dart:io';
+
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:path_provider/path_provider.dart';
 import '../widgets/sub_scaffold.dart';
 import '../widgets/ui.dart';
 import '../theme/app_theme.dart';
@@ -21,6 +24,9 @@ class _CertificatesScreenState extends State<CertificatesScreen> {
   List<StudentCertificateDto>? _certs;
   String? _error;
 
+  /// Yuklab olinayotgan sertifikat id'si (tugma takror bosilmasin).
+  String? _busyId;
+
   @override
   void initState() {
     super.initState();
@@ -38,25 +44,55 @@ class _CertificatesScreenState extends State<CertificatesScreen> {
     }
   }
 
+  /// Sertifikatni qurilmaga saqlaydi.
+  /// Server endpointi token talab qiladi (`Authorize(student,parent)`) — shuning uchun uni
+  /// brauzerda ochib bo'lmaydi. Fayl API klienti orqali olinadi va diskka yoziladi.
   Future<void> _download(StudentCertificateDto cert) async {
-    var url = cert.downloadUrl;
-    if (url.isNotEmpty && !url.startsWith('http')) {
-      url = '$kFileBaseUrl${url.startsWith('/') ? '' : '/'}$url';
-    }
-    if (url.isEmpty) return;
-    final uri = Uri.parse(url);
+    if (_busyId != null) return;
+    setState(() => _busyId = cert.id);
     try {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Ochib bo'lmadi")));
-      }
+      final bytes = await StudentApi.certificateBytes(cert.id);
+      if (bytes.isEmpty) throw Exception("Fayl bo'sh");
+      final path = await _saveFile(cert, bytes);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text('Saqlandi: $path')));
+    } catch (e) {
+      if (!mounted) return;
+      final msg = e.toString().replaceFirst(RegExp(r'^Exception:\s*'), '').trim();
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text(msg.isEmpty ? "Yuklab bo'lmadi" : msg)));
+    } finally {
+      if (mounted) setState(() => _busyId = null);
     }
   }
 
+  /// Faylni foydalanuvchi topa oladigan papkaga yozadi:
+  /// Android — ilovaning tashqi papkasi (fayl menejerida ko'rinadi), aks holda hujjatlar papkasi.
+  Future<String> _saveFile(StudentCertificateDto cert, List<int> bytes) async {
+    Directory? dir;
+    if (!kIsWeb && Platform.isAndroid) {
+      try {
+        dir = await getExternalStorageDirectory();
+      } catch (_) {
+        dir = null;
+      }
+    }
+    dir ??= await getApplicationDocumentsDirectory();
+    final safe = cert.fileName.trim().isEmpty
+        ? 'sertifikat-${cert.id}'
+        : cert.fileName.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
+    final file = File('${dir.path}${Platform.pathSeparator}$safe');
+    await file.writeAsBytes(bytes, flush: true);
+    return file.path;
+  }
+
   /// Tekshirish havolasini nusxalash (web'dagi "Ulashish").
+  /// Web marshruti — `/verify-certificate/:id` (App.tsx).
   Future<void> _share(StudentCertificateDto cert) async {
-    final url = '$kFileBaseUrl/verify/certificate/${cert.id}';
+    final url = '$kFileBaseUrl/verify-certificate/${cert.id}';
     await Clipboard.setData(ClipboardData(text: url));
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Havola nusxalandi')));
@@ -162,6 +198,7 @@ class _CertificatesScreenState extends State<CertificatesScreen> {
                     padding: const EdgeInsets.only(bottom: 12),
                     child: _CertCard(
                       cert: cert,
+                      busy: _busyId == cert.id,
                       onDownload: () => _download(cert),
                       onShare: () => _share(cert),
                     ),
@@ -174,9 +211,15 @@ class _CertificatesScreenState extends State<CertificatesScreen> {
 
 class _CertCard extends StatelessWidget {
   final StudentCertificateDto cert;
+  final bool busy;
   final VoidCallback onDownload;
   final VoidCallback onShare;
-  const _CertCard({required this.cert, required this.onDownload, required this.onShare});
+  const _CertCard({
+    required this.cert,
+    required this.busy,
+    required this.onDownload,
+    required this.onShare,
+  });
 
   ({String label, Color color, Color bg}) _status(AppColors c) {
     switch (cert.status) {
@@ -253,7 +296,8 @@ class _CertCard extends StatelessWidget {
                             ],
                           ),
                         ),
-                        if (cert.expiresAt != null)
+                        // Server muddat yo'q bo'lsa BO'SH satr qaytaradi (null emas).
+                        if ((cert.expiresAt ?? '').isNotEmpty)
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -286,7 +330,14 @@ class _CertCard extends StatelessWidget {
                     const SizedBox(height: 12),
                     Row(
                       children: [
-                        Expanded(child: SButton('Yuklab olish', icon: Icons.download_outlined, onTap: onDownload)),
+                        Expanded(
+                          child: SButton(
+                            busy ? 'Yuklanmoqda…' : 'Yuklab olish',
+                            icon: Icons.download_outlined,
+                            loading: busy,
+                            onTap: busy ? null : onDownload,
+                          ),
+                        ),
                         const SizedBox(width: 8),
                         SizedBox(
                           width: 150,

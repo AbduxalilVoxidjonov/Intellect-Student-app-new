@@ -44,6 +44,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
   int _unread = 0;
   bool _loading = true;
 
+  /// Guruhlar ALOHIDA endpointdan (`/student/groups`) — faol ham, tugagani ham.
+  /// `null` — hali yuklanmadi/xato (bo'sh ro'yxat bilan aralashmasin).
+  List<StudentGroupInfo>? _groups;
+
   @override
   void initState() {
     super.initState();
@@ -58,6 +62,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       StudentApi.notebook().then<Object?>((v) => v).catchError((_) => null),
       StudentApi.school().then<Object?>((v) => v).catchError((_) => null),
       StudentApi.notifications().then<Object?>((v) => v).catchError((_) => null),
+      StudentApi.groups().then<Object?>((v) => v).catchError((_) => null),
     ]);
     if (!mounted) return;
     setState(() {
@@ -65,6 +70,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       _notebook = results[1] as StudentNotebook?;
       _channel = (results[2] as StudentSchoolInfo?)?.telegramChannel ?? '';
       _unread = (results[3] as NotificationsResponse?)?.unread ?? 0;
+      _groups = results[4] as List<StudentGroupInfo>?;
       _loading = false;
     });
   }
@@ -92,29 +98,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
           padding: const EdgeInsets.fromLTRB(20, 10, 20, 6),
           child: Row(
             children: [
+              // "Salom" va FISH ALOHIDA qatorda — uzun ismlar bitta qatorga sig'masdi.
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(_todayLine(),
                         style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: c.muted)),
-                    Text.rich(
-                      TextSpan(
+                    Text('Salom \u{1F44B}',
                         style: TextStyle(
-                          fontSize: 21,
-                          fontWeight: FontWeight.w800,
-                          color: c.text,
-                          letterSpacing: -0.3,
-                          height: 1.15,
-                        ),
-                        children: [
-                          const TextSpan(text: 'Salom, '),
-                          TextSpan(text: fullName, style: TextStyle(color: c.accent)),
-                          const TextSpan(text: ' \u{1F44B}'),
-                        ],
-                      ),
-                      maxLines: 1,
+                            fontSize: 15, fontWeight: FontWeight.w700, color: c.text, height: 1.25)),
+                    Text(
+                      fullName,
+                      maxLines: 2,
                       overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w800,
+                        color: c.accent,
+                        letterSpacing: -0.3,
+                        height: 1.2,
+                      ),
                     ),
                   ],
                 ),
@@ -140,7 +144,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget _body(AppColors c, Session session) {
     final nb = _notebook;
     final balance = _dash?.balance ?? 0;
-    final className = (_dash?.profile.className ?? '').isNotEmpty ? _dash!.profile.className : '—';
+    // Guruhlar `/student/groups` dan: hozirgi (aktiv/sinov/muzlatilgan) va tugaganlar
+    // ALOHIDA ko'rsatiladi — hech biri jimgina yo'qolmaydi.
+    final all = _groups ?? const <StudentGroupInfo>[];
+    final current = all.where((g) => g.isCurrent).toList();
+    final finished = all.where((g) => !g.isCurrent).toList();
 
     // Umumiy statistika (notebook'dan, bo'sh bo'lsa 0)
     final avg = nb?.avgGrade ?? 0;
@@ -155,13 +163,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final hwPct = hwDone + hwMissed > 0 ? (hwDone / (hwDone + hwMissed) * 100).round() : 0;
     final discColor = discipline >= 85 ? c.green : (discipline >= 60 ? c.amber : c.red);
 
-    final isStudent = (session.user?['role'] as String?) != 'parent';
+    final isStudent = session.role != 'parent';
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 28),
       physics: const AlwaysScrollableScrollPhysics(),
       children: [
-        // Qisqacha: dars qoldirish · balans · guruh
+        // Qisqacha: dars qoldirish · balans (guruh pastda uzun kartochkada)
         IntrinsicHeight(
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -181,22 +189,55 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   label: 'Balans',
                   value: fmtMoney(balance),
                   tone: balance < 0 ? c.red : (balance > 0 ? c.green : c.muted),
-                  small: true,
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _Quick(
-                  icon: Icons.school_rounded,
-                  label: 'Guruh',
-                  value: className,
-                  tone: c.accent,
-                  small: true,
                 ),
               ),
             ],
           ),
         ),
+
+        // Hozirgi guruhlar — har biri to'liq kenglikdagi uzun kartochka.
+        for (final g in current) ...[
+          const SizedBox(height: 10),
+          _GroupCard(group: g),
+        ],
+
+        // Tugagan/chiqilgan guruhlar — pastda, so'lg'in ko'rinishda.
+        if (finished.isNotEmpty) ...[
+          const SizedBox(height: 14),
+          Padding(
+            padding: const EdgeInsets.only(left: 4, bottom: 2),
+            child: Text('AVVALGI GURUHLAR',
+                style: TextStyle(
+                    fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: 0.4, color: c.faint)),
+          ),
+          for (final g in finished) ...[
+            const SizedBox(height: 8),
+            Opacity(opacity: 0.72, child: _GroupCard(group: g)),
+          ],
+        ],
+
+        // Ro'yxat KELGAN, lekin bo'sh — o'quvchiga sabab ko'rinib tursin.
+        if (_groups != null && all.isEmpty) ...[
+          const SizedBox(height: 10),
+          SCard(
+            child: Row(
+              children: [
+                Container(
+                  width: 42,
+                  height: 42,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(color: c.surface3, borderRadius: BorderRadius.circular(13)),
+                  child: Icon(Icons.school_outlined, size: 20, color: c.faint),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text("Faol guruh yo'q — ma'muriyatga murojaat qiling",
+                      style: TextStyle(fontSize: 13, color: c.muted)),
+                ),
+              ],
+            ),
+          ),
+        ],
 
         // Telegram kanal (sozlangan bo'lsa, faqat o'quvchi)
         if (_channel.trim().isNotEmpty && isStudent) ...[
@@ -404,19 +445,110 @@ class _NotifBell extends StatelessWidget {
   }
 }
 
+/// Faol guruh kartochkasi — to'liq kenglikda (Telegram kanal kartochkasi uslubida):
+/// guruh nomi, kurs va o'qituvchi, dars kunlari va vaqti.
+class _GroupCard extends StatelessWidget {
+  final StudentGroupInfo group;
+  const _GroupCard({required this.group});
+
+  /// Holat rangi: aktiv — yashil, sinov — ko'k, muzlatilgan — sariq, tugagan — kulrang.
+  Color _statusColor(AppColors c) => switch (group.state) {
+        'frozen' => c.amber,
+        'trial' => c.accent,
+        'finished' => c.faint,
+        _ => c.green,
+      };
+
+  @override
+  Widget build(BuildContext context) {
+    final c = AppTheme.of(context);
+    final g = group;
+    final sc = _statusColor(c);
+    // 2-qator: kurs · o'qituvchi (bo'shlari tushib qoladi).
+    final who = [g.courseName, g.teacherName].where((s) => s.trim().isNotEmpty).join(' · ');
+    // 3-qator: dars kunlari · vaqt.
+    final days = fmtDays(g.days);
+    final time = (g.startTime.isNotEmpty && g.endTime.isNotEmpty)
+        ? '${g.startTime}–${g.endTime}'
+        : (g.startTime.isNotEmpty ? g.startTime : '');
+    final when = [days, time].where((s) => s.isNotEmpty).join(' · ');
+
+    return SCard(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 42,
+            height: 42,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: sc.withValues(alpha: 0.13),
+              borderRadius: BorderRadius.circular(13),
+            ),
+            child: Icon(Icons.school_rounded, size: 20, color: sc),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Nom + holat yorlig'i (HAR guruhda: Aktiv / Sinov / Muzlatilgan).
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(g.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: c.text)),
+                    ),
+                    const SizedBox(width: 8),
+                    SChip(g.statusLabel, color: sc),
+                  ],
+                ),
+                if (who.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Text(who,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(fontSize: 12, color: c.muted)),
+                  ),
+                if (when.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Row(
+                      children: [
+                        Icon(Icons.schedule_rounded, size: 13, color: c.faint),
+                        const SizedBox(width: 5),
+                        Flexible(
+                          child: Text(when,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(fontSize: 11.5, color: c.faint)),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 /// Qisqacha ko'rsatkich kartasi (web `Quick`).
 class _Quick extends StatelessWidget {
   final IconData icon;
   final String label;
   final String value;
   final Color tone;
-  final bool small;
   const _Quick({
     required this.icon,
     required this.label,
     required this.value,
     required this.tone,
-    this.small = false,
   });
 
   @override
@@ -442,7 +574,7 @@ class _Quick extends StatelessWidget {
             value,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: TextStyle(fontSize: small ? 14 : 20, fontWeight: FontWeight.w800, color: tone),
+            style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: tone),
           ),
           const SizedBox(height: 2),
           Text(label, style: TextStyle(fontSize: 10.5, color: c.muted)),

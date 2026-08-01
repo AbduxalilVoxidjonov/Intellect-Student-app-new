@@ -38,6 +38,12 @@ class _LocationScreenState extends State<LocationScreen> {
     _load();
   }
 
+  @override
+  void dispose() {
+    _map.dispose();
+    super.dispose();
+  }
+
   Future<void> _load() async {
     try {
       final loc = await StudentApi.location();

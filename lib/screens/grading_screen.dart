@@ -343,9 +343,11 @@ class _LessonRow extends StatelessWidget {
   String _weekdayShort(String date) {
     final parts = date.split('-');
     if (parts.length != 3) return '';
+    // Sana "2026-08-01" yoki to'liq ISO ("2026-08-01T09:00") bo'lishi mumkin.
+    final dayPart = parts[2].length >= 2 ? parts[2].substring(0, 2) : parts[2];
     final y = int.tryParse(parts[0]);
     final m = int.tryParse(parts[1]);
-    final d = int.tryParse(parts[2]);
+    final d = int.tryParse(dayPart);
     if (y == null || m == null || d == null) return '';
     final wd = DateTime(y, m, d).weekday; // 1=Monday..7=Sunday
     final names = weekdaysUz; // Dushanba..Yakshanba

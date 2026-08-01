@@ -1,5 +1,10 @@
 import 'package:flutter/material.dart';
 
+/// Brend rangi — `assets/logo.png` fonidagi ko'k. Native splash (pubspec:
+/// `flutter_native_splash.color`) va ilova ichidagi yuklanish ekrani AYNAN shu rangda,
+/// shunda ilova ochilganda ekran "sakramaydi".
+const Color kBrandBlue = Color(0xFF020066);
+
 /// O'quvchi portali rang palitrasi — web `.student-app` (index.css) bilan bir xil.
 /// Light va dark uchun ikkita [AppColors] namunasi.
 class AppColors {

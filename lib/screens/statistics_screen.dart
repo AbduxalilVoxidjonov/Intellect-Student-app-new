@@ -124,6 +124,10 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
   // ---------------- JORIY ----------------
 
   List<Widget> _currentView(AppColors c, StudentNotebook nb) {
+    // `nb.grades` kaliti — fan ID'si (nom emas). Ko'rsatish uchun nomga o'giramiz,
+    // aks holda ekranda GUID chiqadi.
+    final subjName = {for (final s in nb.subjects) s.id: s.name};
+
     // ---- Baholar trendi (oylik, fanlar o'rtachasi) ----
     final monthSet = <String>{};
     for (final m in nb.grades.values) {
@@ -147,7 +151,11 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     final subjAvg = nb.grades.entries
         .map((e) {
           final vals = e.value.values.where((v) => v > 0).toList();
-          return (name: e.key, avg: vals.isEmpty ? 0.0 : vals.reduce((a, b) => a + b) / vals.length);
+          return (
+            id: e.key,
+            name: subjName[e.key] ?? e.key,
+            avg: vals.isEmpty ? 0.0 : vals.reduce((a, b) => a + b) / vals.length,
+          );
         })
         .where((s) => s.avg > 0)
         .toList()
@@ -163,10 +171,6 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     // ---- Intizom ----
     final disc = nb.disciplineScore.round();
     final discColor = disc >= 85 ? c.green : (disc >= 60 ? c.amber : c.red);
-
-    // ---- Topshiriqlar ----
-    final a = nb.assignments;
-    final aPct = a.totalMax > 0 ? (a.totalScore / a.totalMax * 100).round() : 0;
 
     // ---- Oylik feedback (fan kesimida) ----
     final feedback = nb.evaluationsBySubject.where((s) => s.avg > 0).toList()
@@ -213,7 +217,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
             const SizedBox(width: 8),
             Expanded(child: _Kpi(value: '$disc', label: 'Intizom', color: discColor)),
             const SizedBox(width: 8),
-            Expanded(child: _Kpi(value: '$aPct%', label: 'Topshiriq', color: _violet(c))),
+            Expanded(child: _Kpi(value: '$hwPct%', label: 'Uy vazifa', color: _violet(c))),
           ],
         ),
       ),
@@ -246,7 +250,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                   max: 5,
                   color: gradeColor(s.avg),
                   right: s.avg.toStringAsFixed(1),
-                  dot: subjectColor(s.name),
+                  dot: subjectColor(s.id),
                 ),
             ],
           ),
@@ -335,46 +339,6 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
         ),
       ),
 
-      // Topshiriqlar
-      if (a.count > 0)
-        _Section(
-          title: 'Topshiriqlar',
-          sub: '${a.gradedCount}/${a.count} baholandi',
-          child: Row(
-            children: [
-              Ring(
-                value: aPct.toDouble(),
-                max: 100,
-                size: 104,
-                stroke: 12,
-                color: _violet(c),
-                center: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text('$aPct%',
-                        style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800, color: _violet(c))),
-                    Text('ball', style: TextStyle(fontSize: 10, color: c.muted)),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 18),
-              Expanded(
-                child: Column(
-                  children: [
-                    _Legend(
-                      color: _violet(c),
-                      label: "To'plangan ball",
-                      value: '${a.totalScore.round()}/${a.totalMax.round()}',
-                    ),
-                    const SizedBox(height: 10),
-                    _Legend(color: c.accent, label: 'Topshiriqlar', value: '${a.count}'),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-
       // Oylik feedback (baholash)
       if (feedback.isNotEmpty)
         _Section(
@@ -447,10 +411,12 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
   // ---------------- ARXIV ----------------
 
   List<Widget> _archiveView(AppColors c, StudentNotebook nb) {
+    // Kalit — fan ID'si; ro'yxatda nomini ko'rsatamiz.
+    final subjName = {for (final s in nb.subjects) s.id: s.name};
     final courses = nb.grades.entries.where((e) => e.value.isNotEmpty).map((e) {
       final vals = e.value.values.where((v) => v > 0).toList();
       return (
-        name: e.key,
+        name: subjName[e.key] ?? e.key,
         months: e.value.length,
         avg: vals.isEmpty ? 0.0 : vals.reduce((x, y) => x + y) / vals.length,
         lessons: e.value.length * 4, // taxminiy

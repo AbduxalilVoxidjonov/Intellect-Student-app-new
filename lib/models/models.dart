@@ -210,6 +210,78 @@ class StudentLesson {
       );
 }
 
+/// O'quvchining guruhi (`GET /student/groups`) — FAOL ham, tugagan/chiqilgan ham keladi.
+/// Hech bir guruh jimgina yo'qolmaydi: qaysi holatda ekani `state` bilan bildiriladi.
+class StudentGroupInfo {
+  final String groupId;
+  final String name;
+  final String courseName;
+  final String teacherName;
+
+  /// Dars kunlari: 0=Dushanba … 6=Yakshanba.
+  final List<int> days;
+  final String startTime;
+  final String endTime;
+  final String room;
+
+  /// Ko'rsatiladigan holat (SERVER hisoblaydi — qoida ikki tilda takrorlanmasin):
+  /// `active` | `trial` | `frozen` | `finished`.
+  final String state;
+
+  /// A'zolikning xom holati (`trial|active|frozen|completed`) va guruhning arxivligi —
+  /// tafsilot kerak bo'lganda (masalan "guruh yopilgan" deb aniqroq yozish uchun).
+  final String status;
+  final bool isActive;
+  final bool groupArchived;
+  final String joinedAt;
+  final String leftAt;
+
+  StudentGroupInfo({
+    required this.groupId,
+    required this.name,
+    required this.courseName,
+    required this.teacherName,
+    required this.days,
+    required this.startTime,
+    required this.endTime,
+    required this.room,
+    required this.state,
+    required this.status,
+    required this.isActive,
+    required this.groupArchived,
+    required this.joinedAt,
+    required this.leftAt,
+  });
+
+  /// Hozir shu guruhda o'qiyaptimi (muzlatilgan ham "hozirgi" hisoblanadi — a'zolik saqlanadi).
+  bool get isCurrent => state != 'finished';
+
+  /// O'quvchiga ko'rsatiladigan holat matni.
+  String get statusLabel => switch (state) {
+        'frozen' => 'Muzlatilgan',
+        'trial' => 'Sinov',
+        'finished' => groupArchived ? 'Guruh yopilgan' : (leftAt.isNotEmpty ? 'Chiqilgan' : 'Yakunlangan'),
+        _ => 'Aktiv',
+      };
+
+  factory StudentGroupInfo.fromJson(Map<String, dynamic> j) => StudentGroupInfo(
+        groupId: _s(j['groupId']),
+        name: _s(j['name']),
+        courseName: _s(j['courseName']),
+        teacherName: _s(j['teacherName']),
+        days: (j['days'] as List? ?? const []).map((e) => _i(e)).toList(),
+        startTime: _s(j['startTime']),
+        endTime: _s(j['endTime']),
+        room: _s(j['room']),
+        state: _s(j['state']),
+        status: _s(j['status']),
+        isActive: _b(j['isActive']),
+        groupArchived: _b(j['groupArchived']),
+        joinedAt: _s(j['joinedAt']),
+        leftAt: _s(j['leftAt']),
+      );
+}
+
 class StudentDashboard {
   final StudentProfile profile;
   final PortalMeta meta;
@@ -575,92 +647,6 @@ class SubjectProgressDetail {
       );
 }
 
-class AssignmentMaterial {
-  final String? id;
-  final String name;
-  final String url;
-  final int size;
-  final String contentType;
-  final String? audioUrl;
-
-  AssignmentMaterial({
-    this.id,
-    required this.name,
-    required this.url,
-    required this.size,
-    required this.contentType,
-    this.audioUrl,
-  });
-
-  factory AssignmentMaterial.fromJson(Map<String, dynamic> j) => AssignmentMaterial(
-        id: _sn(j['id']),
-        name: _s(j['name']),
-        url: _s(j['url']),
-        size: _i(j['size']),
-        contentType: _s(j['contentType']),
-        audioUrl: _sn(j['audioUrl']),
-      );
-}
-
-/// format: 'written' | 'file' | 'test' | 'video' | 'speaking'
-class StudentAssignment {
-  final String id;
-  final String subjectName;
-  final String title;
-  final String description;
-  final String format;
-  final String? startDate;
-  final String? dueDate;
-  final bool lateAccept;
-  final double latePenaltyPct;
-  final double maxScore;
-  final int questionCount;
-  final List<AssignmentMaterial> materials;
-  final bool completed;
-  final String? submittedAt;
-  final double? score;
-  /// Speaking topshirig'i uchun o'qiladigan matn.
-  final String? referenceText;
-
-  StudentAssignment({
-    required this.id,
-    required this.subjectName,
-    required this.title,
-    required this.description,
-    required this.format,
-    this.startDate,
-    this.dueDate,
-    required this.lateAccept,
-    required this.latePenaltyPct,
-    required this.maxScore,
-    required this.questionCount,
-    required this.materials,
-    required this.completed,
-    this.submittedAt,
-    this.score,
-    this.referenceText,
-  });
-
-  factory StudentAssignment.fromJson(Map<String, dynamic> j) => StudentAssignment(
-        id: _s(j['id']),
-        subjectName: _s(j['subjectName']),
-        title: _s(j['title']),
-        description: _s(j['description']),
-        format: _s(j['format']),
-        startDate: _sn(j['startDate']),
-        dueDate: _sn(j['dueDate']),
-        lateAccept: _b(j['lateAccept']),
-        latePenaltyPct: _d(j['latePenaltyPct']),
-        maxScore: _d(j['maxScore']),
-        questionCount: _i(j['questionCount']),
-        materials: _list(j['materials'], AssignmentMaterial.fromJson),
-        completed: _b(j['completed']),
-        submittedAt: _sn(j['submittedAt']),
-        score: _dn(j['score']),
-        referenceText: _sn(j['referenceText']),
-      );
-}
-
 // ---------- Speaking (Azure talaffuz bahosi) ----------
 class SpeakingWord {
   final String word;
@@ -673,223 +659,6 @@ class SpeakingWord {
         word: _s(j['word']),
         accuracy: _d(j['accuracy']),
         errorType: _s(j['errorType']),
-      );
-}
-
-class SpeakingResult {
-  final String recognizedText;
-  final double pronScore;
-  final double accuracy;
-  final double fluency;
-  final double completeness;
-  final double prosody;
-  final List<SpeakingWord> words;
-  final String? error;
-
-  SpeakingResult({
-    required this.recognizedText,
-    required this.pronScore,
-    required this.accuracy,
-    required this.fluency,
-    required this.completeness,
-    required this.prosody,
-    required this.words,
-    this.error,
-  });
-
-  factory SpeakingResult.fromJson(Map<String, dynamic> j) => SpeakingResult(
-        recognizedText: _s(j['recognizedText']),
-        pronScore: _d(j['pronScore']),
-        accuracy: _d(j['accuracy']),
-        fluency: _d(j['fluency']),
-        completeness: _d(j['completeness']),
-        prosody: _d(j['prosody']),
-        words: _list(j['words'], SpeakingWord.fromJson),
-        error: _sn(j['error']),
-      );
-}
-
-class TestQuestion {
-  final String id;
-  final String text;
-  final List<String> options;
-
-  TestQuestion({required this.id, required this.text, required this.options});
-
-  factory TestQuestion.fromJson(Map<String, dynamic> j) => TestQuestion(
-        id: _s(j['id']),
-        text: _s(j['text']),
-        options: _strList(j['options']),
-      );
-}
-
-/// TS: `extends Omit<StudentAssignment, 'questionCount'>` — Dart'da composition orqali.
-class StudentAssignmentDetail {
-  final String id;
-  final String subjectName;
-  final String title;
-  final String description;
-  final String format;
-  final String? startDate;
-  final String? dueDate;
-  final bool lateAccept;
-  final double latePenaltyPct;
-  final double maxScore;
-  final List<AssignmentMaterial> materials;
-  final bool completed;
-  final String? submittedAt;
-  final double? score;
-  final String? referenceText;
-  final List<TestQuestion> questions;
-  final String? answerText;
-  final String? fileUrl;
-
-  StudentAssignmentDetail({
-    required this.id,
-    required this.subjectName,
-    required this.title,
-    required this.description,
-    required this.format,
-    this.startDate,
-    this.dueDate,
-    required this.lateAccept,
-    required this.latePenaltyPct,
-    required this.maxScore,
-    required this.materials,
-    required this.completed,
-    this.submittedAt,
-    this.score,
-    this.referenceText,
-    required this.questions,
-    this.answerText,
-    this.fileUrl,
-  });
-
-  factory StudentAssignmentDetail.fromJson(Map<String, dynamic> j) => StudentAssignmentDetail(
-        id: _s(j['id']),
-        subjectName: _s(j['subjectName']),
-        title: _s(j['title']),
-        description: _s(j['description']),
-        format: _s(j['format']),
-        startDate: _sn(j['startDate']),
-        dueDate: _sn(j['dueDate']),
-        lateAccept: _b(j['lateAccept']),
-        latePenaltyPct: _d(j['latePenaltyPct']),
-        maxScore: _d(j['maxScore']),
-        materials: _list(j['materials'], AssignmentMaterial.fromJson),
-        completed: _b(j['completed']),
-        submittedAt: _sn(j['submittedAt']),
-        score: _dn(j['score']),
-        referenceText: _sn(j['referenceText']),
-        questions: _list(j['questions'], TestQuestion.fromJson),
-        answerText: _sn(j['answerText']),
-        fileUrl: _sn(j['fileUrl']),
-      );
-}
-
-class AssignmentScoreItem {
-  final String assignmentId;
-  final String subjectName;
-  final String title;
-  final String format;
-  final double maxScore;
-  final double? score;
-  final bool completed;
-  final String? dueDate;
-  final String? submittedAt;
-
-  AssignmentScoreItem({
-    required this.assignmentId,
-    required this.subjectName,
-    required this.title,
-    required this.format,
-    required this.maxScore,
-    this.score,
-    required this.completed,
-    this.dueDate,
-    this.submittedAt,
-  });
-
-  factory AssignmentScoreItem.fromJson(Map<String, dynamic> j) => AssignmentScoreItem(
-        assignmentId: _s(j['assignmentId']),
-        subjectName: _s(j['subjectName']),
-        title: _s(j['title']),
-        format: _s(j['format']),
-        maxScore: _d(j['maxScore']),
-        score: _dn(j['score']),
-        completed: _b(j['completed']),
-        dueDate: _sn(j['dueDate']),
-        submittedAt: _sn(j['submittedAt']),
-      );
-}
-
-class StudentAssignmentScores {
-  final int count;
-  final int gradedCount;
-  final double totalScore;
-  final double totalMax;
-  final List<AssignmentScoreItem> items;
-
-  StudentAssignmentScores({
-    required this.count,
-    required this.gradedCount,
-    required this.totalScore,
-    required this.totalMax,
-    required this.items,
-  });
-
-  factory StudentAssignmentScores.fromJson(Map<String, dynamic> j) => StudentAssignmentScores(
-        count: _i(j['count']),
-        gradedCount: _i(j['gradedCount']),
-        totalScore: _d(j['totalScore']),
-        totalMax: _d(j['totalMax']),
-        items: _list(j['items'], AssignmentScoreItem.fromJson),
-      );
-}
-
-class TestAnswer {
-  final String questionId;
-  final int selectedIndex;
-
-  TestAnswer({required this.questionId, required this.selectedIndex});
-
-  factory TestAnswer.fromJson(Map<String, dynamic> j) => TestAnswer(
-        questionId: _s(j['questionId']),
-        selectedIndex: _i(j['selectedIndex']),
-      );
-
-  Map<String, dynamic> toJson() => {'questionId': questionId, 'selectedIndex': selectedIndex};
-}
-
-class SubmitResult {
-  final bool completed;
-  final double? score;
-  final int? correctCount;
-  final int? total;
-
-  SubmitResult({required this.completed, this.score, this.correctCount, this.total});
-
-  factory SubmitResult.fromJson(Map<String, dynamic> j) => SubmitResult(
-        completed: _b(j['completed']),
-        score: _dn(j['score']),
-        correctCount: _in(j['correctCount']),
-        total: _in(j['total']),
-      );
-}
-
-class UploadedFile {
-  final String name;
-  final String url;
-  final int size;
-  final String contentType;
-
-  UploadedFile({required this.name, required this.url, required this.size, required this.contentType});
-
-  factory UploadedFile.fromJson(Map<String, dynamic> j) => UploadedFile(
-        name: _s(j['name']),
-        url: _s(j['url']),
-        size: _i(j['size']),
-        contentType: _s(j['contentType']),
       );
 }
 
@@ -1771,6 +1540,96 @@ class StudentTestResult {
         score: _dn(j['score']),
         rank: _i(j['rank']),
         total: _i(j['total']),
+      );
+}
+
+// ---------- ONLAYN TEST (bot bilan bir xil: PDF savollar + javob kiritish) ----------
+
+/// O'quvchiga ochilgan onlayn test. `state`: `upcoming` | `open` | `closed` | `submitted`.
+class OnlineTest {
+  final String id;
+  final String groupId;
+  final String groupName;
+  final String name;
+  final String date;
+  final int questionCount;
+  final int optionCount;
+
+  /// Javob qabul qilish oynasi ("yyyy-MM-ddTHH:mm").
+  final String startAt;
+  final String endAt;
+
+  /// Savollar fayli ("/uploads/...") — statik tarqatiladi, `absFileUrl` bilan ochiladi.
+  final String pdfUrl;
+  final String pdfName;
+  final String state;
+
+  /// Topshirilgan bo'lsa — to'g'ri javoblar soni va yuborilgan javoblar ("ABCD…").
+  final double? score;
+  final String answers;
+  final String submittedAt;
+
+  OnlineTest({
+    required this.id,
+    required this.groupId,
+    required this.groupName,
+    required this.name,
+    required this.date,
+    required this.questionCount,
+    required this.optionCount,
+    required this.startAt,
+    required this.endAt,
+    required this.pdfUrl,
+    required this.pdfName,
+    required this.state,
+    this.score,
+    required this.answers,
+    required this.submittedAt,
+  });
+
+  bool get isOpen => state == 'open';
+  bool get isSubmitted => state == 'submitted';
+
+  factory OnlineTest.fromJson(Map<String, dynamic> j) => OnlineTest(
+        id: _s(j['id']),
+        groupId: _s(j['groupId']),
+        groupName: _s(j['groupName']),
+        name: _s(j['name']),
+        date: _s(j['date']),
+        questionCount: _i(j['questionCount']),
+        optionCount: _i(j['optionCount']),
+        startAt: _s(j['startAt']),
+        endAt: _s(j['endAt']),
+        pdfUrl: _s(j['pdfUrl']),
+        pdfName: _s(j['pdfName']),
+        state: _s(j['state']),
+        score: _dn(j['score']),
+        answers: _s(j['answers']),
+        submittedAt: _s(j['submittedAt']),
+      );
+}
+
+/// Onlayn test tafsiloti — qator ma'lumoti + o'rin va (vaqt tugagach) javob kaliti.
+class OnlineTestDetail {
+  final OnlineTest test;
+
+  /// Javob kaliti — test vaqti TUGAGUNCHA bo'sh keladi.
+  final String answerKey;
+  final int rank;
+  final int participants;
+
+  OnlineTestDetail({
+    required this.test,
+    required this.answerKey,
+    required this.rank,
+    required this.participants,
+  });
+
+  factory OnlineTestDetail.fromJson(Map<String, dynamic> j) => OnlineTestDetail(
+        test: OnlineTest.fromJson(j),
+        answerKey: _s(j['answerKey']),
+        rank: _i(j['rank']),
+        participants: _i(j['participants']),
       );
 }
 

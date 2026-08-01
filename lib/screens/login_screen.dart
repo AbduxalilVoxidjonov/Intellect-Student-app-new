@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../config.dart';
 import '../services/session.dart';
 import '../theme/app_theme.dart';
 import '../widgets/ui.dart';
@@ -54,15 +55,19 @@ class _LoginScreenState extends State<LoginScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   const SizedBox(height: 12),
-                  Container(
-                    width: 72,
-                    height: 72,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(colors: [c.accent, const Color(0xFF5340C4)]),
+                  // Markaz logosi. `Center` SHART: ustki `Column` `stretch` bo'lgani uchun
+                  // o'ramsiz element butun enga cho'zilib ketardi (kvadrat bo'lmasdi).
+                  Center(
+                    child: ClipRRect(
                       borderRadius: BorderRadius.circular(20),
+                      child: Image.asset(
+                        'assets/logo.png',
+                        width: 88,
+                        height: 88,
+                        fit: BoxFit.cover,
+                        filterQuality: FilterQuality.medium,
+                      ),
                     ),
-                    child: const Icon(Icons.school_rounded, color: Colors.white, size: 38),
                   ),
                   const SizedBox(height: 20),
                   Text("Xush kelibsiz",
@@ -112,7 +117,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   const SizedBox(height: 22),
                   SButton('Kirish', icon: Icons.login_rounded, loading: _loading, large: true, onTap: _submit),
                   const SizedBox(height: 18),
-                  Text('Intellect School',
+                  Text(kBrandName,
                       textAlign: TextAlign.center, style: TextStyle(color: c.faint, fontSize: 12)),
                 ],
               ),

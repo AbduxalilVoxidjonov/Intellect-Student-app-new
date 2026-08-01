@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../api/student_api.dart';
+import '../config.dart';
 import '../models/models.dart';
 import '../theme/app_theme.dart';
 import '../widgets/sub_scaffold.dart';
@@ -85,11 +86,20 @@ class _LessonScreenState extends State<LessonScreen> {
     }
   }
 
+  /// Dars fayli (PDF/audio/video) ochiladi. Serverdan nisbiy yo'l ("/uploads/..") kelsa
+  /// bazaga ulaymiz — aks holda `launchUrl` sxemasiz manzilni ocholmaydi.
   Future<void> _open(String url) async {
-    if (url.isEmpty) return;
-    final uri = Uri.tryParse(url);
+    final abs = absFileUrl(url);
+    if (abs == null) return;
+    final uri = Uri.tryParse(abs);
     if (uri == null) return;
-    await launchUrl(uri, mode: LaunchMode.externalApplication);
+    try {
+      if (await launchUrl(uri, mode: LaunchMode.externalApplication)) return;
+    } catch (_) {}
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(const SnackBar(content: Text("Faylni ochib bo'lmadi")));
   }
 
   /// Mavjud bo'limlar (faqat to'ldirilganlari) — qat'iy tartibda.
