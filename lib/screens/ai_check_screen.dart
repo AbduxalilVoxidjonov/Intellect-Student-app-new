@@ -117,6 +117,9 @@ class _AiCheckScreenState extends State<AiCheckScreen> {
     final st = _status;
     final notReady = st != null && !st.geminiReady;
     final azureMissing = _tab == _Tab.speaking && st != null && !st.azureReady;
+    // Markaz bo'limni ilovada ochmagan (admin: Ilova → AI check → "Ilovada ochish").
+    // Holat kelmagan bo'lsa (so'rov muvaffaqiyatsiz) YOPIQ deb ko'rsatMAYMIZ.
+    final closed = st != null && !st.enabled;
 
     return SubScaffold(
       title: 'AI tekshiruv',
@@ -126,8 +129,42 @@ class _AiCheckScreenState extends State<AiCheckScreen> {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 4, 16, 28),
           children: [
+            // ---- Bo'lim yopiq: faqat izoh (tekshiruv yuborib bo'lmaydi) ----
+            if (closed) ...[
+              SCard(
+                child: Column(
+                  children: [
+                    Container(
+                      width: 60,
+                      height: 60,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: c.surface3,
+                        borderRadius: BorderRadius.circular(19),
+                      ),
+                      child: Icon(Icons.lock_outline_rounded, size: 28, color: c.faint),
+                    ),
+                    const SizedBox(height: 14),
+                    Text(
+                      "Bu bo'lim hali markaz tomonidan ochilmagan",
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: c.text),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      "AI tekshiruv yoqilgach, yozma ishlaringizni va talaffuzingizni shu yerda "
+                      "tekshirib, batafsil tahlil olasiz.",
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 13.5, height: 1.5, color: c.muted),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
+
             // Holat banner
-            if (st != null) ...[
+            if (!closed && st != null) ...[
               SCard(
                 child: st.blocked
                     ? Text('AI tekshiruv sizga cheklangan. Adminga murojaat qiling.',
@@ -152,7 +189,7 @@ class _AiCheckScreenState extends State<AiCheckScreen> {
               const SizedBox(height: 12),
             ],
 
-            if (notReady) ...[
+            if (!closed && notReady) ...[
               SCard(
                 child: Text('AI tekshiruv hali sozlanmagan (admin Gemini kalitini kiritishi kerak).',
                     style: TextStyle(fontSize: 13.5, color: c.amber)),
@@ -160,30 +197,34 @@ class _AiCheckScreenState extends State<AiCheckScreen> {
               const SizedBox(height: 12),
             ],
 
-            // Tab: Writing / Speaking
-            _Seg(
-              options: const ['✍️ Writing', '🎤 Speaking'],
-              index: _tab == _Tab.writing ? 0 : 1,
-              onPick: (i) => setState(() {
-                _tab = i == 0 ? _Tab.writing : _Tab.speaking;
-                _err = null;
-              }),
-            ),
-            const SizedBox(height: 12),
-
-            if (_err != null) ...[
-              SCard(child: Text(_err!, style: TextStyle(fontSize: 13.5, color: c.red))),
+            // ---- Tekshiruv yuborish qismi — faqat bo'lim ochiq bo'lganda ----
+            if (!closed) ...[
+              // Tab: Writing / Speaking
+              _Seg(
+                options: const ['✍️ Writing', '🎤 Speaking'],
+                index: _tab == _Tab.writing ? 0 : 1,
+                onPick: (i) => setState(() {
+                  _tab = i == 0 ? _Tab.writing : _Tab.speaking;
+                  _err = null;
+                }),
+              ),
               const SizedBox(height: 12),
+
+              if (_err != null) ...[
+                SCard(child: Text(_err!, style: TextStyle(fontSize: 13.5, color: c.red))),
+                const SizedBox(height: 12),
+              ],
+
+              if (_tab == _Tab.writing) _writingCard(c, st) else _speakingCard(c, azureMissing),
+              const SizedBox(height: 16),
             ],
 
-            if (_tab == _Tab.writing) _writingCard(c, st) else _speakingCard(c, azureMissing),
-            const SizedBox(height: 16),
-
-            const SectionTitle('Tarix'),
-            if (_history.isEmpty)
-              const EmptyState(icon: Icons.auto_awesome_rounded, text: "Hali tekshiruv yo'q")
-            else
+            // Tarix — bo'lim yopiq bo'lsa ham ESKI natijalar ko'rinaveradi (yo'qolmaydi).
+            if (_history.isNotEmpty) ...[
+              const SectionTitle('Tarix'),
               for (final h in _history) _historyTile(c, h),
+            ] else if (!closed)
+              const EmptyState(icon: Icons.auto_awesome_rounded, text: "Hali tekshiruv yo'q"),
           ],
         ),
       ),

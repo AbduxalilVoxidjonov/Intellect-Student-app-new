@@ -1,4 +1,4 @@
-package com.example.student
+package uz.intellectcrm.student
 
 import io.flutter.embedding.android.FlutterActivity
 

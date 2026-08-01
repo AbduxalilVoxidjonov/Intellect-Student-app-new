@@ -1875,7 +1875,7 @@ class AiCheckListItem {
       );
 }
 
-/// AI tekshiruv holati: kalitlar tayyorligi + limit/premium/blok.
+/// AI tekshiruv holati: bo'lim ochiqmi + kalitlar tayyorligi + limit/premium/blok.
 class AiCheckStatus {
   final bool geminiReady;
   final bool azureReady;
@@ -1885,6 +1885,10 @@ class AiCheckStatus {
   final int usedToday;
   final int remaining;
 
+  /// Markaz bu bo'limni ilovada OCHGANMI (admin: Ilova → AI check → "Ilovada ochish").
+  /// Kalitlar tayyorligidan MUSTAQIL: kalit bo'lsa ham, yopiq bo'lsa bo'lim ishlamaydi.
+  final bool enabled;
+
   AiCheckStatus({
     required this.geminiReady,
     required this.azureReady,
@@ -1893,6 +1897,7 @@ class AiCheckStatus {
     required this.limit,
     required this.usedToday,
     required this.remaining,
+    required this.enabled,
   });
 
   factory AiCheckStatus.fromJson(Map<String, dynamic> j) => AiCheckStatus(
@@ -1903,6 +1908,10 @@ class AiCheckStatus {
         limit: _i(j['limit']),
         usedToday: _i(j['usedToday']),
         remaining: _i(j['remaining']),
+        // ORQAGA MOSLIK: maydon UMUMAN kelmasa (server hali yangilanmagan) — OCHIQ deb
+        // hisoblaymiz, aks holda yangi ilova eski serverga ulanganda bo'lim asossiz
+        // "yopiq" bo'lib qolardi. Server yangi bo'lsa `false` ni aniq yuboradi.
+        enabled: j['enabled'] == null ? true : _b(j['enabled']),
       );
 }
 
