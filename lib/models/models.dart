@@ -2177,7 +2177,8 @@ class StudentSupport {
 // ---------- Shartnoma (elektron nusxa) — web: `ContractDoc` ----------
 
 /// Markaz o'quvchi/ota-ona bilan tuzgan shartnomaning saqlangan nusxasi.
-/// `signedUrl` — imzolangan skan (bo'lsa u ustun), `pdfUrl` — tizim hosil qilgan PDF.
+/// `pdfUrl` — superadmin yuklagan PDF (server faqat shundaylarini qaytaradi),
+/// `docxUrl` — tizim hosil qilgan Word nusxa (admin panelida ishlatiladi).
 class ContractDoc {
   final String id;
   final int number;
@@ -2189,10 +2190,9 @@ class ContractDoc {
   final String date;
   final String pdfUrl;
   final String docxUrl;
-  final String signedUrl;
-  final bool signed;
   final bool delivered;
   final String status;
+  final bool visible;
 
   ContractDoc({
     required this.id,
@@ -2205,15 +2205,10 @@ class ContractDoc {
     required this.date,
     required this.pdfUrl,
     required this.docxUrl,
-    required this.signedUrl,
-    required this.signed,
     required this.delivered,
     required this.status,
+    required this.visible,
   });
-
-  /// Ochish uchun manzil — imzolangan nusxa bo'lsa o'sha, aks holda PDF.
-  String get fileUrl => signed && signedUrl.isNotEmpty ? signedUrl : pdfUrl;
-  bool get hasFile => fileUrl.isNotEmpty;
 
   factory ContractDoc.fromJson(Map<String, dynamic> j) => ContractDoc(
         id: _s(j['id']),
@@ -2226,9 +2221,8 @@ class ContractDoc {
         date: _s(j['date']),
         pdfUrl: _s(j['pdfUrl']),
         docxUrl: _s(j['docxUrl']),
-        signedUrl: _s(j['signedUrl']),
-        signed: _b(j['signed']),
         delivered: _b(j['delivered']),
         status: _s(j['status']),
+        visible: _b(j['visible']),
       );
 }

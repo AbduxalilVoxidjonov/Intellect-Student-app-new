@@ -10,7 +10,8 @@ import '../config.dart';
 
 /// Shartnoma ekrani — WEB: pages/student/Contracts.tsx.
 /// Markaz o'quvchi va ota-ona bilan tuzgan shartnomalarning elektron (PDF) nusxalari.
-/// Imzolangan skan bo'lsa o'sha ochiladi, aks holda tizim hosil qilgan PDF.
+/// Server faqat superadmin PDF yuklagan shartnomalarni qaytaradi — har bir kartochka
+/// bosiladi va PDF tashqi ko'ruvchida ochiladi (yuklab olish ham shu yerdan).
 class ContractsScreen extends StatefulWidget {
   const ContractsScreen({super.key});
   @override
@@ -36,9 +37,9 @@ class _ContractsScreenState extends State<ContractsScreen> {
     }
   }
 
-  /// Shartnoma faylini tashqi ko'ruvchida ochadi (imzolangan nusxa ustun).
+  /// Shartnoma PDF'ini tashqi ko'ruvchida ochadi (yuklab olish ham shu yerdan).
   Future<void> _open(ContractDoc doc) async {
-    var url = doc.signed && doc.signedUrl.isNotEmpty ? doc.signedUrl : doc.pdfUrl;
+    var url = doc.pdfUrl;
     if (url.isEmpty) return;
     if (!url.startsWith('http')) {
       url = '$kFileBaseUrl${url.startsWith('/') ? '' : '/'}$url';
@@ -117,14 +118,13 @@ class _ContractCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = AppTheme.of(context);
-    final hasFile = (doc.signed && doc.signedUrl.isNotEmpty) || doc.pdfUrl.isNotEmpty;
     final title = doc.title.isNotEmpty ? doc.title : 'Shartnoma № ${doc.number}';
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: SCard(
         padding: const EdgeInsets.all(14),
-        onTap: hasFile ? onTap : null,
+        onTap: onTap,
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -133,11 +133,10 @@ class _ContractCard extends StatelessWidget {
               height: 44,
               alignment: Alignment.center,
               decoration: BoxDecoration(
-                color: hasFile ? c.accentSoft : c.surface3,
+                color: c.accentSoft,
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: Icon(Icons.description_rounded,
-                  size: 22, color: hasFile ? c.accent : c.faint),
+              child: Icon(Icons.picture_as_pdf_rounded, size: 22, color: c.accent),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -163,20 +162,14 @@ class _ContractCard extends StatelessWidget {
                       Icon(Icons.event_outlined, size: 14, color: c.faint),
                       const SizedBox(width: 4),
                       Text(fmtDate(doc.date), style: TextStyle(fontSize: 12, color: c.faint)),
-                      const SizedBox(width: 10),
-                      if (doc.signed)
-                        const SChip('Imzolangan', color: Color(0xFF16A34A))
-                      else if (!hasFile)
-                        Text('Fayl mavjud emas', style: TextStyle(fontSize: 12, color: c.faint)),
                     ],
                   ),
                 ],
               ),
             ),
-            if (hasFile) ...[
-              const SizedBox(width: 8),
-              Icon(Icons.open_in_new_rounded, size: 18, color: c.faint),
-            ],
+            // Bosilganda PDF ochiladi/yuklab olinadi — shunga ishora.
+            const SizedBox(width: 8),
+            Icon(Icons.download_rounded, size: 18, color: c.faint),
           ],
         ),
       ),
