@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../api/api_client.dart';
+import 'push.dart';
 
 /// Foydalanuvchi sessiyasi + tema. Ilovaning tepasida `ChangeNotifierProvider` bilan beriladi.
 class Session extends ChangeNotifier {
@@ -82,17 +83,31 @@ class Session extends ChangeNotifier {
   }
 
   void _onUnauthorized() {
-    logout();
+    // Server tokeni yaroqsiz — qurilma tokenini o'chirishga urinmaymiz,
+    // aks holda DELETE yana 401 qaytarib logout'ni qayta chaqirardi.
+    logout(revokeDevice: false);
   }
 
-  Future<void> logout() async {
-    _token = null;
-    _user = null;
-    ApiClient.token = null;
-    final p = await SharedPreferences.getInstance();
-    await p.remove(_kToken);
-    await p.remove(_kUser);
-    notifyListeners();
+  bool _loggingOut = false;
+
+  /// [revokeDevice] — push qurilma tokenini serverdan o'chirish. Sessiya 401 bilan
+  /// tugaganda `false` beriladi (so'rov baribir o'tmaydi).
+  Future<void> logout({bool revokeDevice = true}) async {
+    if (_loggingOut) return;
+    _loggingOut = true;
+    try {
+      // Token hali o'chirilmasdan chaqiriladi — DELETE avtorizatsiya talab qiladi.
+      await PushService.stop(revoke: revokeDevice);
+      _token = null;
+      _user = null;
+      ApiClient.token = null;
+      final p = await SharedPreferences.getInstance();
+      await p.remove(_kToken);
+      await p.remove(_kUser);
+      notifyListeners();
+    } finally {
+      _loggingOut = false;
+    }
   }
 
   Future<void> setDark(bool v) async {

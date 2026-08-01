@@ -31,6 +31,23 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
+        <!-- Ilova FONDA/YOPIQ bo'lganda kelgan FCM bildirishnomasi shu kanalga tushadi.
+             ID lib/services/push.dart dagi PushService._channelId bilan BIR XIL bo'lishi
+             shart — aks holda Android uni ovozsiz "Miscellaneous" kanaliga joylaydi. -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="intellect_student_high" />
+        <!-- Status bar ikonkasi: FAQAT alfa kanali ishlatiladi (oq siluet). Shu sabab
+             @mipmap/ic_launcher YARAMAYDI — u shaffofsiz kvadrat bo'lgani uchun status
+             bar'da oq to'rtburchak bo'lib chiqadi. ic_notification — logotipning shaffof
+             fonli oq silueti (o'qituvchi ilovasi bilan bir xil fayl). -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@drawable/ic_notification" />
+        <!-- Bildirishnomadagi aksent rang (brend ko'ki). -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_color"
+            android:resource="@color/notification_color" />
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data

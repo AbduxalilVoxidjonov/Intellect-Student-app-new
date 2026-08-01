@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../services/permissions.dart';
+import '../services/push.dart';
 import '../theme/app_theme.dart';
 import 'tabs/dashboard_screen.dart';
 import 'tabs/progress_screen.dart';
@@ -36,7 +36,9 @@ class _ShellScreenState extends State<ShellScreen> {
   @override
   void initState() {
     super.initState();
-    AppPermissions.ensureNotifications();
+    // Bildirishnoma ruxsatini so'raydi va FCM tokenini serverga ro'yxatdan o'tkazadi.
+    // Foydalanuvchi kirgandan keyin chaqiriladi — token so'rovi avtorizatsiya talab qiladi.
+    PushService.start();
   }
 
   @override

@@ -227,6 +227,34 @@ class StudentApi {
     if (!ApiClient.ok(res)) _fail(res);
   }
 
+  /// Push qurilma tokenini serverga ro'yxatdan o'tkazadi.
+  /// Endpoint `student` VA `parent` rollariga ochiq — ota-onaning qurilmasini
+  /// farzandining akkauntiga server o'zi bog'laydi, shuning uchun ilova tomonda
+  /// rolga qarab shart QO'YILMAYDI. Chaqiruvchi (PushService) xatoni yutadi.
+  static Future<void> registerDevice({
+    required String token,
+    required String platform,
+    String? deviceName,
+    String? appId,
+  }) async {
+    final res = await ApiClient.dio.post('/student/notifications/register', data: {
+      'token': token,
+      'platform': platform,
+      if (deviceName != null && deviceName.isNotEmpty) 'deviceName': deviceName,
+      if (appId != null && appId.isNotEmpty) 'appId': appId,
+    });
+    if (!ApiClient.ok(res)) _fail(res);
+  }
+
+  /// Qurilma tokenini o'chiradi (logout). Server topilmasa ham 200 qaytaradi.
+  static Future<void> unregisterDevice(String token) async {
+    final res = await ApiClient.dio.delete(
+      '/student/notifications/register',
+      queryParameters: {'token': token},
+    );
+    if (!ApiClient.ok(res)) _fail(res);
+  }
+
   // ---------- Sertifikatlar ----------
   static Future<List<StudentCertificateDto>> certificates() async {
     final res = await ApiClient.dio.get('/student/certificates');

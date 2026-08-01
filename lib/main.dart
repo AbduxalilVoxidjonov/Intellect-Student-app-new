@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'services/push.dart';
 import 'services/session.dart';
 import 'theme/app_theme.dart';
 import 'screens/login_screen.dart';
@@ -7,6 +8,9 @@ import 'screens/shell.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Firebase — fon rejimidagi xabar ishlov beruvchisi runApp'dan OLDIN
+  // ro'yxatdan o'tishi kerak. Token ro'yxati login'dan keyin (ShellScreen).
+  await PushService.initFirebase();
   final session = Session();
   await session.init();
   runApp(
