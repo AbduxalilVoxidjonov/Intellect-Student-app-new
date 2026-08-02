@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../widgets/sub_scaffold.dart';
 import '../widgets/ui.dart';
 import '../theme/app_theme.dart';
+import '../utils/errors.dart';
 import '../utils/format.dart';
 import '../api/student_api.dart';
 import '../models/models.dart';
@@ -45,7 +46,8 @@ class _SubjectProgressDetailScreenState extends State<SubjectProgressDetailScree
       setState(() => _data = d);
     } catch (e) {
       if (!mounted) return;
-      setState(() => _error = e.toString());
+      // Xom istisno matni emas — foydalanuvchiga tushunarli sabab.
+      setState(() => _error = humanError(e));
     }
   }
 
@@ -61,7 +63,11 @@ class _SubjectProgressDetailScreenState extends State<SubjectProgressDetailScree
   Widget _body(BuildContext context) {
     if (_error != null) {
       return Center(
-        child: _Empty(title: "Yuklab bo'lmadi", sub: _error, icon: Icons.warning_amber_rounded),
+        child: _Empty(
+            title: "Yuklab bo'lmadi",
+            sub: _error,
+            icon: Icons.warning_amber_rounded,
+            onRetry: _load),
       );
     }
     final data = _data;
@@ -177,7 +183,15 @@ class _Empty extends StatelessWidget {
   final String title;
   final String? sub;
   final IconData icon;
-  const _Empty({required this.title, this.sub, this.icon = Icons.auto_awesome_rounded});
+
+  /// Berilsa — pastda "Qayta urinish" tugmasi (xato holati uchun).
+  final VoidCallback? onRetry;
+  const _Empty({
+    required this.title,
+    this.sub,
+    this.icon = Icons.auto_awesome_rounded,
+    this.onRetry,
+  });
   @override
   Widget build(BuildContext context) {
     final c = AppTheme.of(context);
@@ -202,6 +216,14 @@ class _Empty extends StatelessWidget {
             Text(sub!,
                 textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 13.5, color: c.muted, height: 1.5)),
+          ],
+          if (onRetry != null) ...[
+            const SizedBox(height: 16),
+            SizedBox(
+              width: 190,
+              child: SButton('Qayta urinish',
+                  icon: Icons.refresh_rounded, kind: BtnKind.soft, onTap: onRetry),
+            ),
           ],
         ],
       ),

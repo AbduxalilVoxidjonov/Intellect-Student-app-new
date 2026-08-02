@@ -255,24 +255,29 @@ class _TestCard extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 8),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                hasScore ? '${_num(item.score!)}/${_num(item.maxScore)}' : '—',
-                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: scoreColor),
-              ),
-              const SizedBox(height: 2),
-              Text(rankLabel,
-                  style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: item.rank == 1
-                          ? c.amber
-                          : item.rank > 0
-                              ? c.muted
-                              : c.faint)),
-            ],
+          // `Flexible` — uzun reyting matni ("🥇 3-o'rin (24 tadan)") yoki katta
+          // textScale da `Row` toshib ketmasin: matn o'ralib ketadi.
+          Flexible(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  hasScore ? '${_num(item.score!)}/${_num(item.maxScore)}' : '—',
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: scoreColor),
+                ),
+                const SizedBox(height: 2),
+                Text(rankLabel,
+                    textAlign: TextAlign.end,
+                    style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: item.rank == 1
+                            ? c.amber
+                            : item.rank > 0
+                                ? c.muted
+                                : c.faint)),
+              ],
+            ),
           ),
         ],
       ),

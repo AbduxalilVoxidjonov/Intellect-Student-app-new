@@ -6,8 +6,15 @@ import '../theme/app_theme.dart';
 import '../api/student_api.dart';
 import '../services/session.dart';
 import '../config.dart';
+import '../utils/errors.dart';
 import 'account_screen.dart';
 
+// TODO(lokalizatsiya): ilovadagi ~600 matn qattiq kodlangan o'zbekcha.
+// Til tanlagichi serverga saqlansa ham ilovada HECH NARSA o'zgarmasdi —
+// foydalanuvchi buni "buzuq funksiya" deb qabul qilardi. To'liq lokalizatsiya
+// (flutter_localizations + intl/arb) qilinmaguncha tanlagich FAOLSIZ va
+// "tez orada" izohi bilan ko'rsatiladi. Lokalizatsiya qo'shilgach: qatorlarga
+// `onTap` qaytarilsin va `PUT /student/settings {language}` tiklansin.
 const _langs = [
   ['uz', "O'zbek"],
   ['ru', 'Русский'],
@@ -23,9 +30,9 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  String _lang = 'uz';
   bool _push = true;
   bool _loading = true;
+  String? _error; // yuklash xatosi — noto'g'ri "default" holatni ko'rsatmaymiz
 
   @override
   void initState() {
@@ -34,16 +41,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _load() async {
+    if (mounted) setState(() { _loading = true; _error = null; });
     try {
       final s = await StudentApi.settings();
       if (!mounted) return;
       setState(() {
-        _lang = s.language.isNotEmpty ? s.language : 'uz';
         _push = s.notificationsEnabled;
         _loading = false;
       });
-    } catch (_) {
-      if (mounted) setState(() => _loading = false);
+    } catch (e) {
+      // ILGARI: xato yutilardi va ekran DEFAULT qiymatlar bilan chizilardi —
+      // o'quvchi push yoqilgan deb o'ylardi. Endi xato ochiq ko'rsatiladi.
+      if (!mounted) return;
+      setState(() {
+        _error = humanError(e);
+        _loading = false;
+      });
     }
   }
 
@@ -54,14 +67,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _saveSettings(Map<String, dynamic> body) async {
     try {
       await StudentApi.saveSettings(body);
-    } catch (_) {
-      // sukut bo'yicha e'tiborsiz — sozlama UI'da darhol qo'llanadi
+    } catch (e) {
+      // Saqlanmaganini aytamiz — aks holda foydalanuvchi saqlandi deb o'ylaydi.
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text(humanError(e, 'Sozlama saqlanmadi'))));
     }
-  }
-
-  void _pickLang(String l) {
-    setState(() => _lang = l);
-    _saveSettings({'language': l});
   }
 
   void _togglePush(bool v) {
@@ -71,9 +83,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (_loading) {
-      return const SubScaffold(title: 'Sozlamalar', child: Center(child: Loader()));
-    }
+    // DIQQAT: ekran BUTUNLAY yuklanishni kutmaydi va xatoda ham berkitilmaydi —
+    // tungi rejim/parol serverga bog'liq emas, ular darhol ochiq bo'lishi kerak.
     final dark = context.watch<Session>().isDark;
 
     return SubScaffold(
@@ -97,26 +108,43 @@ class _SettingsScreenState extends State<SettingsScreen> {
           _Group(
             title: 'Til',
             children: [
+              // Tanlagich VAQTINCHA faolsiz — yuqoridagi TODO(lokalizatsiya)ga qarang.
               for (int i = 0; i < _langs.length; i++)
                 _PickRow(
                   label: _langs[i][1],
-                  selected: _lang == _langs[i][0],
-                  border: i < _langs.length - 1,
-                  onTap: () => _pickLang(_langs[i][0]),
+                  selected: _langs[i][0] == 'uz', // ilova hozircha faqat o'zbekcha
+                  border: true,
+                  onTap: null,
                 ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(11, 10, 11, 8),
+                child: Text(
+                  "Ilova hozircha faqat o'zbek tilida — rus va ingliz tillari tez orada.",
+                  style: TextStyle(fontSize: 12.5, height: 1.4, color: AppTheme.of(context).muted),
+                ),
+              ),
             ],
           ),
+          // FAQAT shu bo'lim serverdan keladi (`GET /student/settings`) — xato
+          // bo'lsa faqat SHU YER almashadi. Tungi rejim (`Session`/
+          // SharedPreferences), parol va versiya serverga bog'liq emas, shuning
+          // uchun internet yo'q bo'lganda ham ishlab turishi SHART.
           _Group(
             title: 'Bildirishnomalar',
             children: [
-              _SwitchRow(
-                icon: Icons.notifications_outlined,
-                iconColor: const Color(0xFFEA580C),
-                title: 'Push bildirishnoma',
-                subtitle: 'Yangi baho, xabar, topshiriq',
-                value: _push,
-                onChanged: _togglePush,
-              ),
+              if (_loading)
+                const SizedBox(height: 72, child: Loader())
+              else if (_error != null)
+                _ErrorView(message: _error!, onRetry: _load)
+              else
+                _SwitchRow(
+                  icon: Icons.notifications_outlined,
+                  iconColor: const Color(0xFFEA580C),
+                  title: 'Push bildirishnoma',
+                  subtitle: 'Yangi baho, xabar, topshiriq',
+                  value: _push,
+                  onChanged: _togglePush,
+                ),
             ],
           ),
           _Group(
@@ -215,22 +243,70 @@ class _PickRow extends StatelessWidget {
   final String label;
   final bool selected;
   final bool border;
-  final VoidCallback onTap;
-  const _PickRow({required this.label, required this.selected, required this.border, required this.onTap});
+
+  /// `null` — qator faolsiz (so'lg'in ko'rinadi va bosilmaydi).
+  final VoidCallback? onTap;
+  const _PickRow({required this.label, required this.selected, required this.border, this.onTap});
   @override
   Widget build(BuildContext context) {
     final c = AppTheme.of(context);
-    return InkWell(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 13),
-        decoration: BoxDecoration(border: border ? Border(bottom: BorderSide(color: c.border)) : null),
-        child: Row(
-          children: [
-            Expanded(child: Text(label, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: c.text))),
-            if (selected) Icon(Icons.check, size: 20, color: c.accent),
-          ],
+    return Opacity(
+      opacity: onTap == null ? 0.45 : 1,
+      child: InkWell(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 13),
+          decoration: BoxDecoration(border: border ? Border(bottom: BorderSide(color: c.border)) : null),
+          child: Row(
+            children: [
+              Expanded(child: Text(label, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: c.text))),
+              if (selected) Icon(Icons.check, size: 20, color: c.accent),
+            ],
+          ),
         ),
+      ),
+    );
+  }
+}
+
+/// Yuklash xatosi bloki — matn/tugma naqshi boshqa ekranlardagi bilan BIR XIL
+/// ("Yuklab bo'lmadi" + sabab + "Qayta urinish"), lekin bu yerda u butun ekran
+/// emas, faqat SERVERDAN keladigan bo'lim ichida turadi — shuning uchun ixcham.
+class _ErrorView extends StatelessWidget {
+  final String message;
+  final VoidCallback onRetry;
+  const _ErrorView({required this.message, required this.onRetry});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = AppTheme.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 12),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 48,
+            height: 48,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(color: c.surface3, borderRadius: BorderRadius.circular(16)),
+            child: Icon(Icons.warning_amber_rounded, size: 24, color: c.faint),
+          ),
+          const SizedBox(height: 10),
+          Text("Yuklab bo'lmadi",
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: c.text)),
+          const SizedBox(height: 6),
+          Text(message,
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 13.5, color: c.muted, height: 1.5)),
+          const SizedBox(height: 16),
+          SizedBox(
+            width: 190,
+            child: SButton('Qayta urinish',
+                icon: Icons.refresh_rounded, kind: BtnKind.soft, onTap: onRetry),
+          ),
+        ],
       ),
     );
   }

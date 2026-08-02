@@ -47,6 +47,18 @@ const _ratingJson = '''
 
 const _schoolJson = '{"name": "Intellect School", "telegramChannel": "@intellectschool"}';
 
+// "Guruh" kartasi ALOHIDA endpointdan (`/student/groups`) keladi — soxta javob
+// berilmasa `groups()` xato beradi va karta umuman chizilmaydi (test yiqilardi).
+const _groupsJson = '''
+[{
+  "groupId": "g1", "name": "Ingliz tili A1", "courseName": "Ingliz tili",
+  "teacherName": "Aziza Karimova", "days": [0, 2, 4],
+  "startTime": "14:00", "endTime": "15:30", "room": "204",
+  "state": "active", "status": "active", "isActive": true, "groupArchived": false,
+  "joinedAt": "2026-01-10", "leftAt": ""
+}]
+''';
+
 const _notificationsJson = '''
 {
   "unread": 3,
@@ -57,15 +69,36 @@ const _notificationsJson = '''
 }
 ''';
 
+/// Intizom balli 0 bo'lgan o'quvchi — "0 ball" va "ma'lumot yo'q" farqi uchun.
+const _zeroDisciplineNotebookJson = '''
+{
+  "id": "s1", "fullName": "Ali Valiyev", "className": "Ingliz tili A1", "balance": 0, "avgGrade": 0,
+  "subjects": [], "grades": {},
+  "attendance": {"missedDays": {}, "illnessDays": {}, "missedLessons": {}, "illnessLessons": {}, "lateCount": {}},
+  "conducted": 0, "attended": 0, "attendancePct": 0,
+  "reasons": [],
+  "disciplineScore": 0, "disciplinePlus": 0, "disciplineMinus": 100, "disciplinePoints": [],
+  "assignments": {"count": 0, "gradedCount": 0, "totalScore": 0, "totalMax": 0, "items": []},
+  "evaluationTypes": [], "evaluations": [], "evaluationsBySubject": [],
+  "homeworkDone": 0, "homeworkMissed": 0, "behaviorGood": 0, "behaviorBad": 0, "marksTrend": []
+}
+''';
+
 class _FakeAdapter implements HttpClientAdapter {
+  /// `null` — standart (`_notebookJson`) javob.
+  final String? notebook;
+  _FakeAdapter({this.notebook});
+
   @override
   Future<ResponseBody> fetch(RequestOptions options, Stream<Uint8List>? requestStream, Future? cancelFuture) async {
     final p = options.path;
     String body = '{}';
     if (p.contains('/student/dashboard')) {
       body = _dashboardJson;
+    } else if (p.contains('/student/groups')) {
+      body = _groupsJson;
     } else if (p.contains('/student/notebook')) {
-      body = _notebookJson;
+      body = notebook ?? _notebookJson;
     } else if (p.contains('/student/rating')) {
       body = _ratingJson;
     } else if (p.contains('/student/school')) {
@@ -82,35 +115,63 @@ class _FakeAdapter implements HttpClientAdapter {
   void close({bool force = false}) {}
 }
 
+Widget _app() => ChangeNotifierProvider<Session>(
+      create: (_) => Session(),
+      child: MaterialApp(
+        builder: (context, child) =>
+            AppTheme(colors: AppColors.light, child: child ?? const SizedBox()),
+        home: const Scaffold(body: DashboardScreen()),
+      ),
+    );
+
+/// Barcha async yuklashlar tugashini kutadi (`pumpAndSettle` ISHLAMAYDI —
+/// `Loader` cheksiz animatsiya qiladi).
+Future<void> _settle(WidgetTester tester) async {
+  for (var i = 0; i < 6; i++) {
+    await tester.pump(const Duration(milliseconds: 300));
+  }
+}
+
 void main() {
   testWidgets('DashboardScreen renders success path with real data', (tester) async {
     ApiClient.dio.httpClientAdapter = _FakeAdapter();
 
-    await tester.pumpWidget(
-      ChangeNotifierProvider<Session>(
-        create: (_) => Session(),
-        child: MaterialApp(
-          builder: (context, child) =>
-              AppTheme(colors: AppColors.light, child: child ?? const SizedBox()),
-          home: const Scaffold(body: DashboardScreen()),
-        ),
-      ),
-    );
-
-    // Barcha async yuklashlar tugashini kutamiz.
-    for (var i = 0; i < 6; i++) {
-      await tester.pump(const Duration(milliseconds: 300));
-    }
+    await tester.pumpWidget(_app());
+    await _settle(tester);
 
     final ex = tester.takeException();
     expect(ex, isNull, reason: 'success path threw: $ex');
 
     // Asosiy kartalar chindan ekranda bo'lishi kerak (web Dashboard.tsx tarkibi).
-    expect(find.text('Guruh'), findsOneWidget);
+    // Guruh kartasi: nom + holat yorlig'i (ilgari "Guruh" degan sarlavha bor edi —
+    // u olib tashlangan, endi karta guruh nomining o'zi bilan boshlanadi).
+    expect(find.text('Ingliz tili A1'), findsOneWidget);
+    expect(find.text('Aktiv'), findsOneWidget);
     expect(find.text('Balans'), findsOneWidget);
     expect(find.text('Dars qoldirdi'), findsOneWidget);
     expect(find.textContaining('Umumiy statistika'), findsWidgets);
     expect(find.text("O'rtacha baho"), findsOneWidget);
     expect(find.text('Davomat'), findsOneWidget);
+  });
+
+  // REGRESSIYA (dashboard_screen.dart:159): ilgari `disciplineRaw != 0 ? ... : 100`
+  // tufayli intizom balli 0 bo'lgan o'quvchi YASHIL "100" ko'rar edi.
+  testWidgets("intizom balli 0 — '100' emas, '0' ko'rsatiladi", (tester) async {
+    // Baland ekran: intizom kartasi ListView ning pastida — kichik ekranda
+    // umuman qurilmaydi va `find.text` uni topa olmaydi.
+    tester.view.physicalSize = const Size(800 * 3, 2000 * 3);
+    tester.view.devicePixelRatio = 3.0;
+    addTearDown(tester.view.reset);
+
+    ApiClient.dio.httpClientAdapter = _FakeAdapter(notebook: _zeroDisciplineNotebookJson);
+
+    await tester.pumpWidget(_app());
+    await _settle(tester);
+
+    expect(tester.takeException(), isNull);
+
+    final card = find.ancestor(of: find.text('Intizom balli'), matching: find.byType(Column)).first;
+    expect(find.descendant(of: card, matching: find.text('0')), findsOneWidget);
+    expect(find.descendant(of: card, matching: find.text('100')), findsNothing);
   });
 }

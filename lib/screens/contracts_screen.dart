@@ -3,6 +3,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../widgets/sub_scaffold.dart';
 import '../widgets/ui.dart';
 import '../theme/app_theme.dart';
+import '../utils/errors.dart';
 import '../utils/format.dart';
 import '../api/student_api.dart';
 import '../models/models.dart';
@@ -29,11 +30,13 @@ class _ContractsScreenState extends State<ContractsScreen> {
   }
 
   Future<void> _load() async {
+    if (mounted) setState(() => _error = null); // qayta urinishda eski xato ketadi
     try {
       final d = await StudentApi.contracts();
       if (mounted) setState(() => _items = d);
     } catch (e) {
-      if (mounted) setState(() => _error = e.toString());
+      // Xom istisno matni emas — foydalanuvchiga tushunarli sabab.
+      if (mounted) setState(() => _error = humanError(e));
     }
   }
 
@@ -58,25 +61,10 @@ class _ContractsScreenState extends State<ContractsScreen> {
     final c = AppTheme.of(context);
 
     if (_error != null) {
+      // Boshqa ekranlardagi kabi bir xil xato ko'rinishi + "Qayta urinish".
       return SubScaffold(
         title: 'Shartnoma',
-        child: Center(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.error_outline, size: 36, color: c.red),
-                const SizedBox(height: 12),
-                Text("Yuklab bo'lmadi",
-                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: c.red)),
-                const SizedBox(height: 12),
-                Text(_error!,
-                    textAlign: TextAlign.center, style: TextStyle(fontSize: 13, color: c.muted)),
-              ],
-            ),
-          ),
-        ),
+        child: Center(child: _ErrorView(message: _error!, onRetry: _load)),
       );
     }
     if (_items == null) {
@@ -172,6 +160,48 @@ class _ContractCard extends StatelessWidget {
             Icon(Icons.download_rounded, size: 18, color: c.faint),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Yuklash xatosi ko'rinishi — barcha ekranlarda BIR XIL naqsh:
+/// "Yuklab bo'lmadi" + sabab + "Qayta urinish".
+class _ErrorView extends StatelessWidget {
+  final String message;
+  final VoidCallback onRetry;
+  const _ErrorView({required this.message, required this.onRetry});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = AppTheme.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 64,
+            height: 64,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(color: c.surface3, borderRadius: BorderRadius.circular(20)),
+            child: Icon(Icons.warning_amber_rounded, size: 30, color: c.faint),
+          ),
+          const SizedBox(height: 10),
+          Text("Yuklab bo'lmadi",
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: c.text)),
+          const SizedBox(height: 6),
+          Text(message,
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 13.5, color: c.muted, height: 1.5)),
+          const SizedBox(height: 16),
+          SizedBox(
+            width: 190,
+            child: SButton('Qayta urinish',
+                icon: Icons.refresh_rounded, kind: BtnKind.soft, onTap: onRetry),
+          ),
+        ],
       ),
     );
   }

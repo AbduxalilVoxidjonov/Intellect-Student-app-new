@@ -17,13 +17,26 @@ class ShellScreen extends StatefulWidget {
 class _ShellScreenState extends State<ShellScreen> {
   int _index = 0;
 
-  final _screens = const [
-    DashboardScreen(),
-    ProgressScreen(),
-    TestsScreen(),
-    ChatScreen(),
-    ProfileScreen(),
-  ];
+  /// Tab ekranlarining KESHI — ekran faqat BIRINCHI marta ochilganda quriladi.
+  ///
+  /// Ilgari `IndexedStack(children: [DashboardScreen(), ...])` beshala ekranni
+  /// darhol qurar edi: har birining `initState` i o'z API so'rovlarini yuboradi
+  /// (curriculum, rating, online-tests, test-results, chat, grades, sertifikat...)
+  /// — ilova ochilishida ~12 parallel so'rov, sekin internetda 5-10 sekund.
+  /// Endi ochilishda faqat Dashboard so'rov yuboradi.
+  ///
+  /// Bir marta qurilgach ekran keshda qoladi va `IndexedStack` uni daraxtda
+  /// saqlaydi — tab almashganda holat (scroll, yuklangan ma'lumot) YO'QOLMAYDI.
+  final List<Widget?> _built = List<Widget?>.filled(5, null);
+
+  /// Tab ekranini yaratadi (faqat kesh bo'sh bo'lganda chaqiriladi).
+  Widget _create(int i) => switch (i) {
+        0 => const DashboardScreen(),
+        1 => const ProgressScreen(),
+        2 => const TestsScreen(),
+        3 => const ChatScreen(),
+        _ => const ProfileScreen(),
+      };
 
   static const _tabs = [
     (_TabDef(Icons.home_rounded, Icons.home_outlined, 'Dashboard')),
@@ -36,9 +49,19 @@ class _ShellScreenState extends State<ShellScreen> {
   @override
   void initState() {
     super.initState();
+    // Ochilishda FAQAT birinchi tab quriladi.
+    _built[_index] = _create(_index);
     // Bildirishnoma ruxsatini so'raydi va FCM tokenini serverga ro'yxatdan o'tkazadi.
     // Foydalanuvchi kirgandan keyin chaqiriladi — token so'rovi avtorizatsiya talab qiladi.
     PushService.start();
+  }
+
+  void _select(int i) {
+    if (_index == i) return;
+    setState(() {
+      _index = i;
+      _built[i] ??= _create(i); // birinchi ochilishda quriladi
+    });
   }
 
   @override
@@ -48,7 +71,18 @@ class _ShellScreenState extends State<ShellScreen> {
       backgroundColor: c.bg,
       body: SafeArea(
         bottom: false,
-        child: IndexedStack(index: _index, children: _screens),
+        child: IndexedStack(
+          index: _index,
+          children: [
+            for (int i = 0; i < _tabs.length; i++)
+              // `TickerMode` — ko'rinmayotgan tabda animatsiya va davriy
+              // so'rovlar to'xtaydi (chat `TickerMode.of(context)` ni kuzatadi).
+              TickerMode(
+                enabled: i == _index,
+                child: _built[i] ?? const SizedBox.shrink(),
+              ),
+          ],
+        ),
       ),
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
@@ -66,7 +100,7 @@ class _ShellScreenState extends State<ShellScreen> {
                     child: _TabItem(
                       def: _tabs[i],
                       active: _index == i,
-                      onTap: () => setState(() => _index = i),
+                      onTap: () => _select(i),
                     ),
                   ),
               ],

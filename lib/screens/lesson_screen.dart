@@ -15,7 +15,8 @@ import '../widgets/ui.dart';
 /// O'quvchi tepadagi progress bilan ketma-ket o'tadi.
 ///
 /// NATIJA SAQLANISHI: har bo'lim yakunlanganda `saveCourseAttempt` chaqiriladi —
-/// test bo'limi ball bilan, ko'rish bo'limlari esa "Yakunlash"da bitta `view` urinishi bo'lib yoziladi.
+/// test bo'limi ball bilan, ko'rish bo'limlari esa "Yakunlash"da YOKI ekrandan orqaga
+/// chiqilganda bitta `view` urinishi bo'lib yoziladi (vaqt yo'qolmasin).
 class LessonScreen extends StatefulWidget {
   final String itemId;
   const LessonScreen({super.key, required this.itemId});
@@ -57,10 +58,14 @@ class _LessonScreenState extends State<LessonScreen> {
   LessonContent? _lesson;
   int _step = 0;
 
-  // Ballsiz bo'limlarda sarflangan vaqt — bo'lim almashganda yig'iladi, "Yakunlash"da yuboriladi.
+  /// Bo'limlar ro'yxati bir marta (yuklashda) hisoblanadi — `build()` da emas.
+  List<_Section> _sectionList = const [];
+
+  // Ballsiz bo'limlarda sarflangan vaqt — bo'lim ALMASHGANDA (hodisa asosida) yig'iladi,
+  // "Yakunlash"da yoki ekrandan chiqilganda serverga yuboriladi.
   DateTime _enteredAt = DateTime.now();
   final Map<_Section, int> _viewSeconds = {};
-  _Section? _prevSection;
+  _Section? _curSection;
   bool _viewSent = false;
 
   @override
@@ -75,6 +80,9 @@ class _LessonScreenState extends State<LessonScreen> {
       if (!mounted) return;
       setState(() {
         _lesson = l;
+        _sectionList = _sections(l);
+        _curSection = _sectionList.isEmpty ? null : _sectionList.first;
+        _enteredAt = DateTime.now();
         _loading = false;
       });
     } catch (_) {
@@ -102,11 +110,17 @@ class _LessonScreenState extends State<LessonScreen> {
       ..showSnackBar(const SnackBar(content: Text("Faylni ochib bo'lmadi")));
   }
 
+  /// YAROQLI savollar: `correctIndex` variantlar oralig'idan tashqarida bo'lsa
+  /// (CRM'da noto'g'ri kiritilgan), o'quvchi hech qachon to'g'ri javob bera olmaydi
+  /// va serverga 0/N soxta natija yozilib qolardi — bunday savol umuman ko'rsatilmaydi.
+  static List<LessonQuestion> _validQuestions(LessonContent l) =>
+      l.questions.where((q) => q.correctIndex >= 0 && q.correctIndex < q.options.length).toList();
+
   /// Mavjud bo'limlar (faqat to'ldirilganlari) — qat'iy tartibda.
   /// Audio + test IKKALASI bo'lsa — bitta "Audio test" bo'limi; faqat bittasi bo'lsa alohida chiqadi.
   List<_Section> _sections(LessonContent l) {
     final hasAudio = l.audioUrl.isNotEmpty;
-    final hasTest = l.questions.isNotEmpty;
+    final hasTest = _validQuestions(l).isNotEmpty;
     final s = <_Section>[];
     if (l.videoUrl.isNotEmpty) s.add(_Section.video);
     if (l.textContent.isNotEmpty) s.add(_Section.text);
@@ -120,24 +134,26 @@ class _LessonScreenState extends State<LessonScreen> {
 
   /// Joriy bo'limda o'tirilgan vaqtni hisobga qo'shadi va sanashni qaytadan boshlaydi.
   void _flushSection() {
-    final s = _prevSection;
+    final s = _curSection;
     if (s != null) {
       _viewSeconds[s] = (_viewSeconds[s] ?? 0) + DateTime.now().difference(_enteredAt).inSeconds;
     }
     _enteredAt = DateTime.now();
   }
 
-  void _trackSection(_Section cur) {
-    if (_prevSection != cur) {
-      _flushSection();
-      _prevSection = cur;
-    }
+  /// Bo'limni almashtirish — vaqt shu yerda (hodisa asosida) yopiladi, `build()` da emas.
+  void _goTo(int step) {
+    if (step < 0 || step >= _sectionList.length) return;
+    _flushSection();
+    setState(() {
+      _step = step;
+      _curSection = _sectionList[step];
+    });
   }
 
-  /// "Yakunlash" — ballsiz bo'limlar bo'yicha "ko'rib chiqdi" yozuvini yuboradi (bir marta).
-  Future<void> _finishLesson(List<_Section> sections) async {
-    _flushSection();
-    final viewed = _viewSections.where(sections.contains).toList();
+  /// Ballsiz bo'limlar bo'yicha "ko'rib chiqdi" yozuvini yuboradi (bir marta).
+  void _sendViewAttempt() {
+    final viewed = _viewSections.where(_sectionList.contains).toList();
     if (!_viewSent && viewed.isNotEmpty) {
       _viewSent = true;
       unawaited(StudentApi.saveCourseAttempt(
@@ -159,6 +175,12 @@ class _LessonScreenState extends State<LessonScreen> {
         ],
       ));
     }
+  }
+
+  /// "Yakunlash" — vaqtni yopib, yozuvni yuboradi va ekranni yopadi.
+  void _finishLesson() {
+    _flushSection();
+    _sendViewAttempt();
     if (mounted) Navigator.of(context).maybePop();
   }
 
@@ -176,7 +198,7 @@ class _LessonScreenState extends State<LessonScreen> {
       );
     }
 
-    final sections = _sections(l);
+    final sections = _sectionList;
     if (sections.isEmpty) {
       return SubScaffold(
         title: title,
@@ -188,90 +210,99 @@ class _LessonScreenState extends State<LessonScreen> {
     final step = _step.clamp(0, total - 1);
     final cur = sections[step];
     final isLast = step >= total - 1;
-    _trackSection(cur);
 
-    return SubScaffold(
-      title: title,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // Tepadagi progress — bo'limlar bo'yicha
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 2, 16, 10),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(
-                  children: [
-                    for (int i = 0; i < total; i++) ...[
-                      Expanded(
-                        child: Container(
-                          height: 6,
-                          decoration: BoxDecoration(
-                            color: i <= step ? c.accent : c.surface3,
-                            borderRadius: BorderRadius.circular(6),
+    // Orqaga chiqilganda ham sarflangan vaqt va "ko'rib chiqdi" yozuvi yuboriladi —
+    // ilgari u FAQAT oxirgi bo'limdagi "Yakunlash" bosilganda yuborilardi va
+    // o'quvchi orqaga chiqsa butunlay yo'qolardi.
+    return PopScope(
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) return;
+        _flushSection();
+        _sendViewAttempt();
+      },
+      child: SubScaffold(
+        title: title,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Tepadagi progress — bo'limlar bo'yicha
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 2, 16, 10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: [
+                      for (int i = 0; i < total; i++) ...[
+                        Expanded(
+                          child: Container(
+                            height: 6,
+                            decoration: BoxDecoration(
+                              color: i <= step ? c.accent : c.surface3,
+                              borderRadius: BorderRadius.circular(6),
+                            ),
                           ),
                         ),
-                      ),
-                      if (i < total - 1) const SizedBox(width: 5),
+                        if (i < total - 1) const SizedBox(width: 5),
+                      ],
                     ],
-                  ],
-                ),
-                const SizedBox(height: 6),
-                Row(
-                  children: [
-                    Icon(_sectionIcon[cur], size: 14, color: c.accent),
-                    const SizedBox(width: 5),
-                    Text(_sectionLabel[cur] ?? '',
-                        style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: c.accent)),
-                    const Spacer(),
-                    Text('${step + 1} / $total',
-                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: c.muted)),
-                  ],
-                ),
-              ],
+                  ),
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      Icon(_sectionIcon[cur], size: 14, color: c.accent),
+                      const SizedBox(width: 5),
+                      Text(_sectionLabel[cur] ?? '',
+                          style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: c.accent)),
+                      const Spacer(),
+                      Text('${step + 1} / $total',
+                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: c.muted)),
+                    ],
+                  ),
+                ],
+              ),
             ),
-          ),
-          Expanded(
-            child: ListView(
-              padding: const EdgeInsets.fromLTRB(16, 4, 16, 28),
-              children: [
-                _sectionBody(c, l, cur),
-                const SizedBox(height: 20),
-                // Navigatsiya: oldingi / keyingi-tugatdim
-                Row(
-                  children: [
-                    if (step > 0) ...[
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 28),
+                children: [
+                  _sectionBody(c, l, cur),
+                  const SizedBox(height: 20),
+                  // Navigatsiya: oldingi / keyingi-tugatdim
+                  Row(
+                    children: [
+                      if (step > 0) ...[
+                        Expanded(
+                          child: SButton(
+                            'Oldingi',
+                            icon: Icons.chevron_left_rounded,
+                            kind: BtnKind.ghost,
+                            onTap: () => _goTo(step - 1),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                      ],
                       Expanded(
+                        flex: 2,
                         child: SButton(
-                          'Oldingi',
-                          icon: Icons.chevron_left_rounded,
-                          kind: BtnKind.ghost,
-                          onTap: () => setState(() => _step = step - 1),
+                          isLast ? 'Yakunlash' : 'Tugatdim · Keyingi',
+                          icon: isLast ? Icons.check_rounded : Icons.arrow_forward_rounded,
+                          onTap: () {
+                            if (isLast) {
+                              _finishLesson();
+                            } else {
+                              _goTo(step + 1);
+                            }
+                          },
                         ),
                       ),
-                      const SizedBox(width: 10),
                     ],
-                    Expanded(
-                      flex: 2,
-                      child: SButton(
-                        isLast ? 'Yakunlash' : 'Tugatdim · Keyingi',
-                        icon: isLast ? Icons.check_rounded : Icons.arrow_forward_rounded,
-                        onTap: () {
-                          if (isLast) {
-                            _finishLesson(sections);
-                          } else {
-                            setState(() => _step = step + 1);
-                          }
-                        },
-                      ),
-                    ),
-                  ],
-                ),
-              ],
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -289,7 +320,7 @@ class _LessonScreenState extends State<LessonScreen> {
       case _Section.vocab:
         return _VocabMatch(pairs: l.vocab);
       case _Section.test:
-        return _TestRunner(questions: l.questions, itemId: widget.itemId);
+        return _TestRunner(questions: _validQuestions(l), itemId: widget.itemId);
       case _Section.audiotest:
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -307,7 +338,7 @@ class _LessonScreenState extends State<LessonScreen> {
               ),
             ),
             const SizedBox(height: 14),
-            _TestRunner(questions: l.questions, itemId: widget.itemId),
+            _TestRunner(questions: _validQuestions(l), itemId: widget.itemId),
           ],
         );
       case _Section.exercise:
@@ -595,7 +626,12 @@ class _TestRunnerState extends State<_TestRunner> {
   void initState() {
     super.initState();
     final rnd = math.Random();
-    final qs = [...widget.questions]..shuffle(rnd);
+    // Yaroqsiz `correctIndex` li savol tashlab ketiladi (himoya qatlami — ekran ham
+    // filtrlaydi): aks holda `order.indexOf(...)` -1 qaytarib, o'quvchi hech qachon
+    // to'g'ri javob bera olmaydi va serverga 0/N soxta natija yozilardi.
+    final qs = [
+      ...widget.questions.where((q) => q.correctIndex >= 0 && q.correctIndex < q.options.length),
+    ]..shuffle(rnd);
     _qs = qs.map((q) {
       final order = List<int>.generate(q.options.length, (i) => i)..shuffle(rnd);
       return _RandQ(
@@ -639,6 +675,13 @@ class _TestRunnerState extends State<_TestRunner> {
   @override
   Widget build(BuildContext context) {
     final c = AppTheme.of(context);
+    // Barcha savol yaroqsiz bo'lsa — test o'rniga izoh (soxta 0/N natija yozilmaydi).
+    if (_qs.isEmpty) {
+      return SCard(
+        child: Text("Test savollari to'g'ri sozlanmagan — o'qituvchiga murojaat qiling.",
+            textAlign: TextAlign.center, style: TextStyle(fontSize: 13, color: c.muted)),
+      );
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [

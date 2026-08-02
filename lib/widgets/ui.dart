@@ -182,6 +182,13 @@ class Ring extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = AppTheme.of(context);
     final pct = max > 0 ? (value / max).clamp(0.0, 1.0) : 0.0;
+    // Markazdagi matn uchun ruxsat etilgan maydon — halqa diametridan chiziq
+    // qalinligicha kichik. `FittedBox(scaleDown)` matn shu maydonga sig'masa
+    // (uzun qiymat, katta `textScaleFactor` — ko'rish qobiliyati past
+    // foydalanuvchilar tizim sozlamasi) uni PROPORSIONAL kichraytiradi.
+    // Sig'sa — hech narsa o'zgarmaydi, ya'ni oddiy ko'rinish avvalgidek.
+    // Busiz matn satrga ko'chib ketib halqadan toshib chiqardi.
+    final inner = (size - stroke).clamp(0.0, size);
     return SizedBox(
       width: size,
       height: size,
@@ -192,7 +199,12 @@ class Ring extends StatelessWidget {
             size: Size(size, size),
             painter: _RingPainter(pct, stroke, color ?? c.accent, c.surface3),
           ),
-          if (center != null) center!,
+          if (center != null)
+            SizedBox(
+              width: inner,
+              height: inner,
+              child: FittedBox(fit: BoxFit.scaleDown, child: center!),
+            ),
         ],
       ),
     );

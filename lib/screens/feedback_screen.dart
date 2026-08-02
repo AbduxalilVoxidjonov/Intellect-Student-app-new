@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import '../api/student_api.dart';
 import '../theme/app_theme.dart';
+import '../utils/errors.dart';
 import '../widgets/sub_scaffold.dart';
 import '../widgets/ui.dart';
 
@@ -41,7 +42,9 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
       });
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Rasm tanlashda xatolik: $e')));
+      // Xom istisno matni emas — tushunarli sabab.
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Rasm tanlashda xatolik: ${humanError(e)}')));
     }
   }
 
@@ -103,7 +106,8 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
       Navigator.of(context).maybePop();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+      // Xom istisno matni emas — tushunarli sabab.
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(humanError(e, 'Yuborilmadi'))));
     } finally {
       if (mounted) setState(() => _sending = false);
     }

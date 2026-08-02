@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io' show Platform;
 
 import 'package:firebase_core/firebase_core.dart';
@@ -38,6 +39,13 @@ class PushService {
   static final _local = FlutterLocalNotificationsPlugin();
   static bool _started = false;
 
+  /// Stream obunalari — `stop()` da BEKOR QILINISHI shart. Aks holda
+  /// logout→login siklidan keyin eski obunalar ham yashab qoladi va bitta
+  /// pushdan N ta banner chiqadi, `onTokenRefresh` esa N marta
+  /// `registerDevice` yuboradi.
+  static StreamSubscription<RemoteMessage>? _msgSub;
+  static StreamSubscription<String>? _tokenSub;
+
   /// Ilova ishga tushganda (main) bir marta chaqiriladi — Firebase'ni tayyorlaydi.
   /// Xato yutiladi: push ishlamasligi ilovani bloklamasligi kerak.
   ///
@@ -64,17 +72,31 @@ class PushService {
       await FirebaseMessaging.instance.requestPermission();
       await _setupLocalNotifications();
 
+      // Eski obunalar qolib ketmasin (xatodan keyingi qayta urinish holati).
+      await _cancelSubs();
+
       // Oldinda kelgan xabarni o'zimiz ko'rsatamiz (ovoz shu yerda chiqadi).
-      FirebaseMessaging.onMessage.listen(_showForeground);
+      _msgSub = FirebaseMessaging.onMessage.listen(_showForeground);
 
       // Token o'zgarsa (qayta o'rnatish, cache tozalash) — qayta ro'yxatdan o'tkazamiz.
-      FirebaseMessaging.instance.onTokenRefresh.listen(_register);
+      _tokenSub = FirebaseMessaging.instance.onTokenRefresh.listen(_register);
 
       final token = await FirebaseMessaging.instance.getToken();
       if (token != null && token.isNotEmpty) await _register(token);
     } catch (e) {
+      // Bayroqni QAYTARAMIZ: aks holda bir marta xato bo'lsa shu sessiyada push
+      // umuman qayta urinmasdi (keyingi `start()` darrov `return` qilardi).
+      _started = false;
+      await _cancelSubs();
       debugPrint('Push: start xatosi — $e');
     }
+  }
+
+  static Future<void> _cancelSubs() async {
+    await _msgSub?.cancel();
+    await _tokenSub?.cancel();
+    _msgSub = null;
+    _tokenSub = null;
   }
 
   /// Logout paytida — qurilma tokenini serverdan o'chiradi, aks holda chiqib
@@ -85,6 +107,10 @@ class PushService {
   /// Bunda faqat ichki holat tozalanadi (keyingi login qayta ro'yxatdan o'tkazadi).
   static Future<void> stop({bool revoke = true}) async {
     _started = false;
+    // Obunalarni HAR DOIM bekor qilamiz (revoke qiymatidan qat'i nazar) —
+    // aks holda keyingi `start()` ikkinchi obunani qo'shar va bitta pushdan
+    // ikkita banner chiqardi.
+    await _cancelSubs();
     if (!revoke) return;
     try {
       if (Firebase.apps.isEmpty) return;

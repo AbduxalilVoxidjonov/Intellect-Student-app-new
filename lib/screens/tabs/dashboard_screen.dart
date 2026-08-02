@@ -6,6 +6,7 @@ import '../../models/models.dart';
 import '../../services/session.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/format.dart';
+import '../../utils/telegram.dart';
 import '../../widgets/ui.dart';
 import '../notifications_sheet.dart';
 import '../statistics_screen.dart';
@@ -15,18 +16,6 @@ const _telegramBlue = Color(0xFF229ED9);
 
 /// Web `--violet` (light: #7c3aed, dark: #a78bfa) — AppColors'da yo'q.
 Color _violet(AppColors c) => c.isDark ? const Color(0xFFA78BFA) : const Color(0xFF7C3AED);
-
-const _wdUz = ['Yakshanba', 'Dushanba', 'Seshanba', 'Chorshanba', 'Payshanba', 'Juma', 'Shanba'];
-const _moUz = [
-  'yanvar', 'fevral', 'mart', 'aprel', 'may', 'iyun',
-  'iyul', 'avgust', 'sentabr', 'oktabr', 'noyabr', 'dekabr',
-];
-
-/// Web `todayLine()` — "1-avgust, Shanba".
-String _todayLine() {
-  final d = DateTime.now();
-  return '${d.day}-${_moUz[d.month - 1]}, ${_wdUz[d.weekday % 7]}';
-}
 
 /// O'quvchi ilovasi — Dashboard tab (web: `pages/student/Dashboard.tsx`).
 /// Salom + bildirishnoma, qisqacha ko'rsatkichlar (dars qoldirish / balans / guruh),
@@ -103,7 +92,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(_todayLine(),
+                    Text(todayLine(),
                         style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: c.muted)),
                     Text('Salom \u{1F44B}',
                         style: TextStyle(
@@ -156,12 +145,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final conducted = nb?.conducted ?? 0;
     final missed = conducted - attended > 0 ? conducted - attended : 0;
     final attPct = (nb?.attendancePct ?? 0).round();
-    final disciplineRaw = (nb?.disciplineScore ?? 0).round();
-    final discipline = disciplineRaw != 0 ? disciplineRaw : 100;
+    // Intizom balli: "MA'LUMOT YO'Q" (notebook kelmadi) va "0 ball" — ikki BOSHQA holat.
+    // Ilgari `disciplineRaw != 0 ? disciplineRaw : 100` turardi: eng yomon intizomli
+    // o'quvchi (0 ball) yashil "100" ko'rar edi.
+    final discipline = nb?.disciplineScore.round();
     final hwDone = nb?.homeworkDone ?? 0;
     final hwMissed = nb?.homeworkMissed ?? 0;
     final hwPct = hwDone + hwMissed > 0 ? (hwDone / (hwDone + hwMissed) * 100).round() : 0;
-    final discColor = discipline >= 85 ? c.green : (discipline >= 60 ? c.amber : c.red);
+    final discColor = discipline == null
+        ? c.muted
+        : (discipline >= 85 ? c.green : (discipline >= 60 ? c.amber : c.red));
 
     final isStudent = session.role != 'parent';
 
@@ -328,7 +321,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 child: _Stat(
                   icon: Icons.verified_user_rounded,
                   label: 'Intizom balli',
-                  value: '$discipline',
+                  value: discipline == null ? '—' : '$discipline',
                   color: discColor,
                 ),
               ),
@@ -349,30 +342,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 }
 
-/// Kanal manzilidan Telegram username'ini ajratadi:
-/// `https://telegram.me/intellektkokand`, `https://t.me/x`, `@x`, `x` → `intellektkokand`/`x`.
-/// Ajratib bo'lmasa (masalan xususiy taklif havolasi) null.
-String? _telegramUsername(String? raw) {
-  final v = (raw ?? '').trim();
-  if (v.isEmpty) return null;
-  final uri = Uri.tryParse(v.startsWith('http') ? v : 'https://$v');
-  if (uri != null &&
-      (uri.host.contains('t.me') || uri.host.contains('telegram.me') || uri.host.contains('telegram.dog'))) {
-    final segs = uri.pathSegments.where((s) => s.isNotEmpty).toList();
-    // Xususiy taklif havolalari (joinchat / +...) uchun username ishlamaydi.
-    if (segs.length == 1 && !segs.first.startsWith('+') && segs.first != 'joinchat') {
-      return segs.first;
-    }
-    return null;
-  }
-  final s = v.startsWith('@') ? v.substring(1) : v;
-  if (s.isNotEmpty && !s.contains('/') && !s.contains(' ')) return s;
-  return null;
-}
-
 /// Kanalni to'g'ridan-to'g'ri Telegram ilovasida ochadi (`tg://`), bo'lmasa web havola.
 Future<void> _openTelegram(String raw) async {
-  final username = _telegramUsername(raw);
+  final username = telegramUsername(raw);
   // 1. Telegram ilovasida to'g'ridan-to'g'ri ochish.
   if (username != null) {
     try {

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../../api/student_api.dart';
 import '../../models/models.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/errors.dart';
 import '../../utils/format.dart';
 import '../../widgets/ui.dart';
 import '../lesson_screen.dart';
@@ -53,13 +54,14 @@ class _ProgressScreenState extends State<ProgressScreen> {
       final c = await StudentApi.curriculum();
       if (mounted) setState(() { _courses = c; _curError = null; });
     } catch (e) {
-      if (mounted) setState(() => _curError = e.toString());
+      // Xom istisno matni emas — foydalanuvchiga tushunarli sabab.
+      if (mounted) setState(() => _curError = humanError(e));
     }
     try {
       final r = await StudentApi.rating();
       if (mounted) setState(() { _rating = r; _ratError = null; });
     } catch (e) {
-      if (mounted) setState(() => _ratError = e.toString());
+      if (mounted) setState(() => _ratError = humanError(e));
     }
   }
 
@@ -148,7 +150,13 @@ class _ProgressScreenState extends State<ProgressScreen> {
 
   Widget _dastur(AppColors c) {
     if (_curError != null) {
-      return _scrollWrap([_EmptyBlock(title: "Yuklab bo'lmadi", sub: _curError, icon: Icons.warning_amber_rounded)]);
+      return _scrollWrap([
+        _EmptyBlock(
+            title: "Yuklab bo'lmadi",
+            sub: _curError,
+            icon: Icons.warning_amber_rounded,
+            onRetry: _load),
+      ]);
     }
     final courses = _courses;
     if (courses == null) return _scrollWrap([const SizedBox(height: 120), const Loader()]);
@@ -219,7 +227,13 @@ class _ProgressScreenState extends State<ProgressScreen> {
 
   Widget _rating0(AppColors c, {required bool school}) {
     if (_ratError != null) {
-      return _scrollWrap([_EmptyBlock(title: "Yuklab bo'lmadi", sub: _ratError, icon: Icons.warning_amber_rounded)]);
+      return _scrollWrap([
+        _EmptyBlock(
+            title: "Yuklab bo'lmadi",
+            sub: _ratError,
+            icon: Icons.warning_amber_rounded,
+            onRetry: _load),
+      ]);
     }
     final board = _rating;
     if (board == null) return _scrollWrap([const SizedBox(height: 120), const Loader()]);
@@ -270,20 +284,20 @@ class _ProgressScreenState extends State<ProgressScreen> {
   }
 }
 
-/// Medal rangi (1/2/3-o'rin), aks holda null.
-Color? _medal(int rank) {
-  if (rank == 1) return const Color(0xFFF5B301);
-  if (rank == 2) return const Color(0xFF9AA3B2);
-  if (rank == 3) return const Color(0xFFCD7F32);
-  return null;
-}
-
 /// Bo'sh holat bloki (web `EmptyState`).
 class _EmptyBlock extends StatelessWidget {
   final String title;
   final String? sub;
   final IconData icon;
-  const _EmptyBlock({required this.title, this.sub, this.icon = Icons.auto_awesome_rounded});
+
+  /// Berilsa — pastda "Qayta urinish" tugmasi (xato holati uchun).
+  final VoidCallback? onRetry;
+  const _EmptyBlock({
+    required this.title,
+    this.sub,
+    this.icon = Icons.auto_awesome_rounded,
+    this.onRetry,
+  });
   @override
   Widget build(BuildContext context) {
     final c = AppTheme.of(context);
@@ -308,6 +322,14 @@ class _EmptyBlock extends StatelessWidget {
             Text(sub!,
                 textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 13.5, color: c.muted, height: 1.5)),
+          ],
+          if (onRetry != null) ...[
+            const SizedBox(height: 16),
+            SizedBox(
+              width: 190,
+              child: SButton('Qayta urinish',
+                  icon: Icons.refresh_rounded, kind: BtnKind.soft, onTap: onRetry),
+            ),
           ],
         ],
       ),
@@ -887,7 +909,7 @@ class _RankRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = AppTheme.of(context);
-    final m = _medal(row.rank);
+    final m = medalColor(row.rank);
     return Container(
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(

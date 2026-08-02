@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../api/student_api.dart';
 import '../models/models.dart';
 import '../theme/app_theme.dart';
+import '../utils/errors.dart';
 import '../utils/format.dart';
 import '../widgets/ui.dart';
 
@@ -25,7 +26,7 @@ class _NotificationsSheet extends StatefulWidget {
 class _NotificationsSheetState extends State<_NotificationsSheet> {
   List<AppNotification>? _items;
   bool _loading = true;
-  bool _error = false;
+  String? _error; // tarmoq xatosi — "bildirishnoma yo'q" holatidan FARQLI
 
   @override
   void initState() {
@@ -34,6 +35,10 @@ class _NotificationsSheetState extends State<_NotificationsSheet> {
   }
 
   Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
     try {
       final r = await StudentApi.notifications();
       if (!mounted) return;
@@ -45,10 +50,10 @@ class _NotificationsSheetState extends State<_NotificationsSheet> {
       try {
         await StudentApi.markNotificationsRead();
       } catch (_) {}
-    } catch (_) {
+    } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = true;
+        _error = humanError(e);
         _loading = false;
       });
     }
@@ -75,7 +80,8 @@ class _NotificationsSheetState extends State<_NotificationsSheet> {
       });
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+      // Xom istisno matni emas — tushunarli xabar.
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(humanError(e))));
     }
   }
 
@@ -129,8 +135,15 @@ class _NotificationsSheetState extends State<_NotificationsSheet> {
   Widget _content(ScrollController sc) {
     if (_loading) return const Loader();
     final items = _items ?? const <AppNotification>[];
-    // Web'da xato ham, bo'sh ro'yxat ham bir xil holatni ko'rsatadi.
-    if (_error || items.isEmpty) {
+    // Tarmoq xatosi "bildirishnoma yo'q" DEB ko'rsatilmaydi — aks holda
+    // foydalanuvchi yangi e'lonni o'tkazib yuboradi.
+    if (_error != null) {
+      return ListView(
+        controller: sc,
+        children: [_ErrorView(message: _error!, onRetry: _load)],
+      );
+    }
+    if (items.isEmpty) {
       return ListView(
         controller: sc,
         children: const [
@@ -148,6 +161,48 @@ class _NotificationsSheetState extends State<_NotificationsSheet> {
       itemCount: items.length,
       separatorBuilder: (_, _) => const SizedBox(height: 8),
       itemBuilder: (_, i) => _NotifCard(item: items[i], onConfirm: () => _confirm(items[i])),
+    );
+  }
+}
+
+/// Yuklash xatosi ko'rinishi — barcha ekranlarda BIR XIL naqsh:
+/// "Yuklab bo'lmadi" + sabab + "Qayta urinish".
+class _ErrorView extends StatelessWidget {
+  final String message;
+  final VoidCallback onRetry;
+  const _ErrorView({required this.message, required this.onRetry});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = AppTheme.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 64,
+            height: 64,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(color: c.surface3, borderRadius: BorderRadius.circular(20)),
+            child: Icon(Icons.warning_amber_rounded, size: 30, color: c.faint),
+          ),
+          const SizedBox(height: 10),
+          Text("Yuklab bo'lmadi",
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: c.text)),
+          const SizedBox(height: 6),
+          Text(message,
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 13.5, color: c.muted, height: 1.5)),
+          const SizedBox(height: 16),
+          SizedBox(
+            width: 190,
+            child: SButton('Qayta urinish',
+                icon: Icons.refresh_rounded, kind: BtnKind.soft, onTap: onRetry),
+          ),
+        ],
+      ),
     );
   }
 }

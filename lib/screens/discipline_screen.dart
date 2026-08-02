@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../widgets/sub_scaffold.dart';
 import '../widgets/ui.dart';
 import '../theme/app_theme.dart';
+import '../utils/errors.dart';
 import '../utils/format.dart';
 import '../api/student_api.dart';
 import '../models/models.dart';
@@ -30,7 +31,8 @@ class _DisciplineScreenState extends State<DisciplineScreen> {
       setState(() => _data = d);
     } catch (e) {
       if (!mounted) return;
-      setState(() => _error = e.toString());
+      // Xom istisno matni emas — foydalanuvchiga tushunarli sabab.
+      setState(() => _error = humanError(e));
     }
   }
 
@@ -41,7 +43,8 @@ class _DisciplineScreenState extends State<DisciplineScreen> {
 
   Widget _body(BuildContext context) {
     if (_error != null) {
-      return Center(child: EmptyState(icon: Icons.error_outline, text: "Yuklab bo'lmadi.\n$_error"));
+      // Barcha ekranlarda BIR XIL xato ko'rinishi: sabab + "Qayta urinish".
+      return Center(child: _ErrorView(message: _error!, onRetry: _load));
     }
     final data = _data;
     if (data == null) return const Loader();
@@ -185,6 +188,48 @@ class _DisciplineScreenState extends State<DisciplineScreen> {
           ),
           Text('${reward ? '+' : '−'}${_fmt(r.points.abs())}',
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: rc)),
+        ],
+      ),
+    );
+  }
+}
+
+/// Yuklash xatosi ko'rinishi — barcha ekranlarda BIR XIL naqsh:
+/// "Yuklab bo'lmadi" + sabab + "Qayta urinish".
+class _ErrorView extends StatelessWidget {
+  final String message;
+  final VoidCallback onRetry;
+  const _ErrorView({required this.message, required this.onRetry});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = AppTheme.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 64,
+            height: 64,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(color: c.surface3, borderRadius: BorderRadius.circular(20)),
+            child: Icon(Icons.warning_amber_rounded, size: 30, color: c.faint),
+          ),
+          const SizedBox(height: 10),
+          Text("Yuklab bo'lmadi",
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: c.text)),
+          const SizedBox(height: 6),
+          Text(message,
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 13.5, color: c.muted, height: 1.5)),
+          const SizedBox(height: 16),
+          SizedBox(
+            width: 190,
+            child: SButton('Qayta urinish',
+                icon: Icons.refresh_rounded, kind: BtnKind.soft, onTap: onRetry),
+          ),
         ],
       ),
     );

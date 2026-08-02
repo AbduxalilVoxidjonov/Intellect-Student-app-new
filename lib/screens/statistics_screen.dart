@@ -4,23 +4,13 @@ import 'package:flutter/material.dart';
 import '../widgets/sub_scaffold.dart';
 import '../widgets/ui.dart';
 import '../theme/app_theme.dart';
+import '../utils/errors.dart';
 import '../utils/format.dart';
 import '../api/student_api.dart';
 import '../models/models.dart';
 
 /// Web `--violet` (light: #7c3aed, dark: #a78bfa) — AppColors'da yo'q.
 Color _violet(AppColors c) => c.isDark ? const Color(0xFFA78BFA) : const Color(0xFF7C3AED);
-
-/// "2026-01" → "Yan '26" (web `monthShort`).
-String _monthShort(String m) {
-  if (m.length < 7) return m;
-  final n = int.tryParse(m.substring(5, 7)) ?? 0;
-  final name = (n >= 1 && n <= 12) ? monthsUz[n - 1] : m;
-  return "${name.length > 3 ? name.substring(0, 3) : name} '${m.substring(2, 4)}";
-}
-
-/// Map qiymatlari yig'indisi (web `sumVals`).
-double _sumVals(Map<String, double> o) => o.values.fold(0.0, (a, b) => a + b);
 
 /// O'quvchi — UMUMIY STATISTIKA (web: `pages/student/Statistics.tsx`).
 /// Baholar trendi, fanlar o'rtachasi, davomat + sabablar, intizom,
@@ -50,7 +40,9 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
       setState(() => _nb = d);
     } catch (e) {
       if (!mounted) return;
-      setState(() => _error = e.toString());
+      // Xom istisno matni (`DioException [bad response] ... /api/student/notebook`)
+      // foydalanuvchiga ko'rsatilmaydi — `humanError` tushunarli matn beradi.
+      setState(() => _error = humanError(e));
     }
   }
 
@@ -62,7 +54,12 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
   Widget _body(BuildContext context) {
     final c = AppTheme.of(context);
     if (_error != null) {
-      return _Empty(icon: Icons.warning_amber_rounded, title: "Yuklab bo'lmadi", sub: _error!);
+      // Xato holati — bo'sh holatdan FARQLI: sabab + "Qayta urinish".
+      return _Empty(
+          icon: Icons.warning_amber_rounded,
+          title: "Yuklab bo'lmadi",
+          sub: _error!,
+          onRetry: _load);
     }
     final nb = _nb;
     if (nb == null) return const Center(child: Loader());
@@ -142,7 +139,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
         if (v != null && v > 0) vals.add(v);
       }
       return (
-        label: _monthShort(mo),
+        label: monthShort(mo),
         value: vals.isEmpty ? 0.0 : vals.reduce((a, b) => a + b) / vals.length,
       );
     }).toList();
@@ -165,7 +162,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     final attended = nb.attended;
     final conducted = nb.conducted;
     final absent = math.max(0, conducted - attended);
-    final lateTotal = _sumVals(nb.attendance.lateCount).round();
+    final lateTotal = sumValues(nb.attendance.lateCount).round();
     final attPct = nb.attendancePct.round();
 
     // ---- Intizom ----
@@ -187,7 +184,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     final hwTrend = trendSrc.map((m) {
       final tot = m.homeworkDone + m.homeworkMissed;
       return (
-        label: _monthShort(m.month),
+        label: monthShort(m.month),
         value: tot > 0 ? (m.homeworkDone / tot * 100).roundToDouble() : 0.0,
         tot: tot,
       );
@@ -631,8 +628,12 @@ class _TrendBars extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = AppTheme.of(context);
-    return SizedBox(
-      height: 116,
+    // BALANDLIK: qat'iy `SizedBox(height: 116)` yetmasdi — eng baland ustunda
+    // qiymat matni (~15) + 4 + ustun 86 + 4 + yorliq (~14) = ~123dp bo'lib toshardi.
+    // Endi balandlik MAZMUNGA qarab o'sadi (`minHeight` faqat past ustunlarda
+    // diagramma pastga tushib ketmasligi uchun) — hech qanday holatda toshmaydi.
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: 116),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
@@ -640,6 +641,7 @@ class _TrendBars extends StatelessWidget {
             if (i > 0) const SizedBox(width: 8),
             Expanded(
               child: Column(
+                mainAxisSize: MainAxisSize.min,
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
                   Text(data[i].value > 0 ? fmt(data[i].value) : '',
@@ -774,7 +776,10 @@ class _Empty extends StatelessWidget {
   final IconData icon;
   final String title;
   final String? sub;
-  const _Empty({required this.icon, required this.title, this.sub});
+
+  /// Berilsa — pastda "Qayta urinish" tugmasi (xato holati uchun).
+  final VoidCallback? onRetry;
+  const _Empty({required this.icon, required this.title, this.sub, this.onRetry});
   @override
   Widget build(BuildContext context) {
     final c = AppTheme.of(context);
@@ -797,6 +802,14 @@ class _Empty extends StatelessWidget {
           if (sub != null && sub!.isNotEmpty) ...[
             const SizedBox(height: 6),
             Text(sub!, textAlign: TextAlign.center, style: TextStyle(fontSize: 13.5, color: c.muted)),
+          ],
+          if (onRetry != null) ...[
+            const SizedBox(height: 16),
+            SizedBox(
+              width: 190,
+              child: SButton('Qayta urinish',
+                  icon: Icons.refresh_rounded, kind: BtnKind.soft, onTap: onRetry),
+            ),
           ],
         ],
       ),

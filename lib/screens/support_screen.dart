@@ -3,7 +3,9 @@ import '../api/student_api.dart';
 import '../config.dart';
 import '../models/models.dart';
 import '../theme/app_theme.dart';
+import '../utils/errors.dart';
 import '../utils/format.dart';
+import '../utils/support_slots.dart';
 import '../widgets/sub_scaffold.dart';
 import '../widgets/ui.dart';
 
@@ -19,6 +21,7 @@ class SupportScreen extends StatefulWidget {
 class _SupportScreenState extends State<SupportScreen> {
   StudentSupport? _data;
   bool _loading = true;
+  String? _error; // yuklash xatosi — "o'qituvchi yo'q" holatidan FARQLI
   String? _busyId; // bron/bekor qilish jarayonidagi slot id
   String? _expandedId; // ochilgan o'qituvchi
 
@@ -29,11 +32,15 @@ class _SupportScreenState extends State<SupportScreen> {
   }
 
   Future<void> _load() async {
+    if (mounted) setState(() => _error = null);
     try {
       final d = await StudentApi.support();
       if (mounted) setState(() => _data = d);
-    } catch (_) {
-      // bo'sh holat ko'rsatamiz
+    } catch (e) {
+      // ILGARI: `catch (_) {}` — internet uzilganda "Hozircha support o'qituvchi
+      // yo'q" chiqardi va o'quvchi bron qilishdan voz kechardi. Endi xato
+      // ALOHIDA ko'rsatiladi ("Qayta urinish" bilan).
+      if (mounted) setState(() => _error = humanError(e));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -43,10 +50,9 @@ class _SupportScreenState extends State<SupportScreen> {
   /// (masalan slotni boshqa o'quvchi band qilib ulgurgan).
   void _toast(Object e) {
     if (!mounted) return;
-    final msg = e.toString().replaceFirst(RegExp(r'^Exception:\s*'), '').trim();
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(msg.isEmpty ? 'Amal bajarilmadi' : msg)));
+      ..showSnackBar(SnackBar(content: Text(humanError(e, 'Amal bajarilmadi'))));
   }
 
   Future<void> _book(String id) async {
@@ -81,6 +87,14 @@ class _SupportScreenState extends State<SupportScreen> {
 
     if (_loading) {
       return const SubScaffold(title: 'Support', child: Center(child: Loader()));
+    }
+
+    // Yuklash xatosi — bo'sh holat O'RNIGA (aks holda o'quvchi "slot yo'q" deb o'ylaydi).
+    if (_error != null && _data == null) {
+      return SubScaffold(
+        title: 'Support',
+        child: Center(child: _ErrorView(message: _error!, onRetry: _load)),
+      );
     }
 
     final myBookings = _data?.myBookings ?? const <StudentSupportBooking>[];
@@ -134,6 +148,48 @@ class _SupportScreenState extends State<SupportScreen> {
                 ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Yuklash xatosi ko'rinishi — barcha ekranlarda BIR XIL naqsh:
+/// "Yuklab bo'lmadi" + sabab + "Qayta urinish".
+class _ErrorView extends StatelessWidget {
+  final String message;
+  final VoidCallback onRetry;
+  const _ErrorView({required this.message, required this.onRetry});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = AppTheme.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 64,
+            height: 64,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(color: c.surface3, borderRadius: BorderRadius.circular(20)),
+            child: Icon(Icons.warning_amber_rounded, size: 30, color: c.faint),
+          ),
+          const SizedBox(height: 10),
+          Text("Yuklab bo'lmadi",
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: c.text)),
+          const SizedBox(height: 6),
+          Text(message,
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 13.5, color: c.muted, height: 1.5)),
+          const SizedBox(height: 16),
+          SizedBox(
+            width: 190,
+            child: SButton('Qayta urinish',
+                icon: Icons.refresh_rounded, kind: BtnKind.soft, onTap: onRetry),
+          ),
+        ],
       ),
     );
   }
@@ -246,23 +302,10 @@ class _TeacherCard extends StatelessWidget {
     required this.onBook,
   });
 
-  /// Slotlarni kun bo'yicha guruhlaydi (sana → vaqt bo'yicha tartiblangan).
-  List<MapEntry<String, List<StudentSupportSlot>>> _groupByDate() {
-    final map = <String, List<StudentSupportSlot>>{};
-    for (final s in t.openSlots) {
-      (map[s.date] ??= []).add(s);
-    }
-    final keys = map.keys.toList()..sort();
-    return keys.map((k) {
-      final list = [...map[k]!]..sort((a, b) => a.startTime.compareTo(b.startTime));
-      return MapEntry(k, list);
-    }).toList();
-  }
-
   @override
   Widget build(BuildContext context) {
     final c = AppTheme.of(context);
-    final groups = _groupByDate();
+    final groups = groupSlotsByDate(t.openSlots);
     final slotCount = t.openSlots.length;
 
     return SCard(

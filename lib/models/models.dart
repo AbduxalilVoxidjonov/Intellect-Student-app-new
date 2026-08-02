@@ -1,21 +1,106 @@
 // Avtomatik generatsiya qilingan (studentPortal.ts asosida) — o'quvchi portali modellari.
 // Barcha DTO'lar bir xil nomlar bilan (PascalCase), maydonlar camelCase.
+//
+// Har bir DTO da:
+//   * `fromJson` — serverdan/keshdan o'qish (tip-bardosh, hech qachon qulamaydi);
+//   * `toJson`   — offline kesh (SharedPreferences/fayl) uchun. Kalitlar `fromJson`
+//                  kalitlari bilan AYNAN bir xil, shuning uchun
+//                  `X.fromJson(x.toJson()) == x` (round-trip) qiymatni saqlaydi;
+//   * `==`/`hashCode` — qiymat bo'yicha tenglik. Ro'yxat/Map maydonlari CHUQUR
+//                  solishtiriladi, shuning uchun DTO'larni `Set`/`Map` kalitida
+//                  ishlatish va `didUpdateWidget` da o'zgarishni aniqlash mumkin.
 
-double _d(dynamic v) => (v as num?)?.toDouble() ?? 0;
-int _i(dynamic v) => (v as num?)?.toInt() ?? 0;
+/// Ro'yxat/Map (va ichma-ich joylashgan qiymatlar) uchun CHUQUR solishtirish.
+/// `package:collection` `pubspec.yaml` da to'g'ridan-to'g'ri e'lon qilinmagan
+/// (faqat tranzitiv) — `depend_on_referenced_packages` lint bermasin deb
+/// qo'lda yozilgan. Skalyarlar uchun oddiy `==` ga tushadi, shuning uchun
+/// universal ishlatish mumkin.
+bool _deepEq(Object? a, Object? b) {
+  if (identical(a, b)) return true;
+  if (a is List) {
+    if (b is! List || a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (!_deepEq(a[i], b[i])) return false;
+    }
+    return true;
+  }
+  if (a is Map) {
+    if (b is! Map || a.length != b.length) return false;
+    for (final k in a.keys) {
+      if (!b.containsKey(k) || !_deepEq(a[k], b[k])) return false;
+    }
+    return true;
+  }
+  return a == b;
+}
+
+/// `_deepEq` bilan IZCHIL hash: ro'yxat — TARTIBLI, Map — TARTIBSIZ
+/// (`_deepEq` ham Map kalitlarini tartibdan qat'i nazar solishtiradi).
+int _deepHash(Object? v) {
+  if (v is List) return Object.hashAll(v.map(_deepHash));
+  if (v is Map) {
+    return Object.hashAllUnordered(
+      v.entries.map((e) => Object.hash(_deepHash(e.key), _deepHash(e.value))),
+    );
+  }
+  return v.hashCode;
+}
+
+/// Barcha maydonlar bo'yicha hash. `Object.hash` maksimum 20 ta argument
+/// oladi (StudentNotebook da 24 ta maydon bor) — `Object.hashAll` cheklovsiz.
+int _hashProps(List<Object?> props) => Object.hashAll(props.map(_deepHash));
+
+/// Tip-bardoshli son o'qish: backend pul/baholarni MATN sifatida yuborishi
+/// mumkin ({"balance": "-850000.00"}) — `as num` cast qilsak ekran qulaydi.
+/// NaN/Infinity ham yaroqsiz hisoblanadi (keyingi `.round()` xato tashlamasin).
+num? _num(dynamic v) {
+  if (v is num) return v.isFinite ? v : null;
+  if (v is bool) return v ? 1 : 0;
+  if (v is String) {
+    var s = v.trim();
+    if (s.isEmpty) return null;
+    // Kasr ajratuvchi vergul ("4,5") → nuqta; nuqta ham bo'lsa vergul
+    // minglik ajratuvchi ("1,234.56") deb tashlanadi.
+    s = s.contains('.') ? s.replaceAll(',', '') : s.replaceAll(',', '.');
+    final n = num.tryParse(s);
+    return (n != null && n.isFinite) ? n : null;
+  }
+  return null;
+}
+
+double _d(dynamic v) => _num(v)?.toDouble() ?? 0;
+// `.round()` — `.toInt()` kasrni kesib tashlaydi (2.9 → 2), yaxlitlash to'g'riroq.
+int _i(dynamic v) => _num(v)?.round() ?? 0;
 String _s(dynamic v) => v?.toString() ?? '';
-bool _b(dynamic v) => v == true;
 
-double? _dn(dynamic v) => v == null ? null : (v as num).toDouble();
-int? _in(dynamic v) => v == null ? null : (v as num).toInt();
+/// SQL tinyint (1/0) va form-encoded ("true"/"1") javoblar ham tan olinadi.
+bool _b(dynamic v) {
+  if (v is bool) return v;
+  if (v is num) return v != 0;
+  if (v is String) {
+    final s = v.trim().toLowerCase();
+    return s == 'true' || s == '1';
+  }
+  return false;
+}
+
+double? _dn(dynamic v) => _num(v)?.toDouble();
+int? _in(dynamic v) => _num(v)?.round();
 String? _sn(dynamic v) => v?.toString();
 
-Map<String, dynamic> _map(dynamic v) => (v as Map?)?.cast<String, dynamic>() ?? {};
+/// Obyekt o'rniga ro'yxat/boshqa tur kelsa cast xatosi bermasin.
+Map<String, dynamic> _map(dynamic v) {
+  if (v is Map<String, dynamic>) return v;
+  if (v is Map) return v.map((k, val) => MapEntry(k.toString(), val));
+  return {};
+}
 
-List<String> _strList(dynamic v) => (v as List?)?.map((e) => e.toString()).toList() ?? [];
+List<String> _strList(dynamic v) =>
+    v is List ? v.map((e) => e?.toString() ?? '').toList() : [];
 
+/// Ro'yxat o'rniga obyekt kelsa bo'sh ro'yxat; map bo'lmagan elementlar tashlanadi.
 List<T> _list<T>(dynamic v, T Function(Map<String, dynamic>) fromJson) =>
-    (v as List?)?.map((e) => fromJson(_map(e))).toList() ?? [];
+    v is List ? v.whereType<Map>().map((e) => fromJson(_map(e))).toList() : [];
 
 /// Record<number|string, number> -> Map<String, double> (JSON kaliti doim string keladi).
 Map<String, double> _numMap(dynamic v) {
@@ -82,6 +167,49 @@ class StudentProfile {
         photoUrl: _sn(j['photoUrl']),
         parentPhotoUrl: _sn(j['parentPhotoUrl']),
       );
+
+  /// `StudentProfile.fromJson(x.toJson())` — qiymatni saqlaydigan aylanma (offline kesh uchun).
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'id': id,
+        'fullName': fullName,
+        'className': className,
+        'birthDate': birthDate,
+        'gender': gender,
+        'parentFullName': parentFullName,
+        'parentPhone': parentPhone,
+        'enrollmentDate': enrollmentDate,
+        'photoUrl': photoUrl,
+        'parentPhotoUrl': parentPhotoUrl,
+      };
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is StudentProfile &&
+          id == other.id &&
+          fullName == other.fullName &&
+          className == other.className &&
+          birthDate == other.birthDate &&
+          gender == other.gender &&
+          parentFullName == other.parentFullName &&
+          parentPhone == other.parentPhone &&
+          enrollmentDate == other.enrollmentDate &&
+          photoUrl == other.photoUrl &&
+          parentPhotoUrl == other.parentPhotoUrl;
+
+  @override
+  int get hashCode => _hashProps(<Object?>[
+        id,
+        fullName,
+        className,
+        birthDate,
+        gender,
+        parentFullName,
+        parentPhone,
+        enrollmentDate,
+        photoUrl,
+        parentPhotoUrl,
+      ]);
 }
 
 class LessonTime {
@@ -96,6 +224,28 @@ class LessonTime {
         startTime: _s(j['startTime']),
         endTime: _s(j['endTime']),
       );
+
+  /// `LessonTime.fromJson(x.toJson())` — qiymatni saqlaydigan aylanma (offline kesh uchun).
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'period': period,
+        'startTime': startTime,
+        'endTime': endTime,
+      };
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is LessonTime &&
+          period == other.period &&
+          startTime == other.startTime &&
+          endTime == other.endTime;
+
+  @override
+  int get hashCode => _hashProps(<Object?>[
+        period,
+        startTime,
+        endTime,
+      ]);
 }
 
 class AbsenceReasonMeta {
@@ -112,6 +262,31 @@ class AbsenceReasonMeta {
         short: _s(j['short']),
         isLate: _b(j['isLate']),
       );
+
+  /// `AbsenceReasonMeta.fromJson(x.toJson())` — qiymatni saqlaydigan aylanma (offline kesh uchun).
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'id': id,
+        'name': name,
+        'short': short,
+        'isLate': isLate,
+      };
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is AbsenceReasonMeta &&
+          id == other.id &&
+          name == other.name &&
+          short == other.short &&
+          isLate == other.isLate;
+
+  @override
+  int get hashCode => _hashProps(<Object?>[
+        id,
+        name,
+        short,
+        isLate,
+      ]);
 }
 
 class PortalMeta {
@@ -133,6 +308,31 @@ class PortalMeta {
         currentQuarter: _i(j['currentQuarter']),
         currentWeek: _i(j['currentWeek']),
       );
+
+  /// `PortalMeta.fromJson(x.toJson())` — qiymatni saqlaydigan aylanma (offline kesh uchun).
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'lessonTimes': lessonTimes.map((e) => e.toJson()).toList(),
+        'absenceReasons': absenceReasons.map((e) => e.toJson()).toList(),
+        'currentQuarter': currentQuarter,
+        'currentWeek': currentWeek,
+      };
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is PortalMeta &&
+          _deepEq(lessonTimes, other.lessonTimes) &&
+          _deepEq(absenceReasons, other.absenceReasons) &&
+          currentQuarter == other.currentQuarter &&
+          currentWeek == other.currentWeek;
+
+  @override
+  int get hashCode => _hashProps(<Object?>[
+        lessonTimes,
+        absenceReasons,
+        currentQuarter,
+        currentWeek,
+      ]);
 }
 
 class HomeworkItem {
@@ -175,6 +375,52 @@ class HomeworkItem {
         reasonName: _sn(j['reasonName']),
         isLate: _b(j['isLate']),
       );
+
+  /// `HomeworkItem.fromJson(x.toJson())` — qiymatni saqlaydigan aylanma (offline kesh uchun).
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'date': date,
+        'period': period,
+        'subjectId': subjectId,
+        'subjectName': subjectName,
+        'topic': topic,
+        'homework': homework,
+        'conducted': conducted,
+        'grade': grade,
+        'reasonId': reasonId,
+        'reasonName': reasonName,
+        'isLate': isLate,
+      };
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is HomeworkItem &&
+          date == other.date &&
+          period == other.period &&
+          subjectId == other.subjectId &&
+          subjectName == other.subjectName &&
+          topic == other.topic &&
+          homework == other.homework &&
+          conducted == other.conducted &&
+          grade == other.grade &&
+          reasonId == other.reasonId &&
+          reasonName == other.reasonName &&
+          isLate == other.isLate;
+
+  @override
+  int get hashCode => _hashProps(<Object?>[
+        date,
+        period,
+        subjectId,
+        subjectName,
+        topic,
+        homework,
+        conducted,
+        grade,
+        reasonId,
+        reasonName,
+        isLate,
+      ]);
 }
 
 class StudentLesson {
@@ -208,6 +454,43 @@ class StudentLesson {
         teacherId: _s(j['teacherId']),
         teacherName: _s(j['teacherName']),
       );
+
+  /// `StudentLesson.fromJson(x.toJson())` — qiymatni saqlaydigan aylanma (offline kesh uchun).
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'day': day,
+        'period': period,
+        'startTime': startTime,
+        'endTime': endTime,
+        'subjectId': subjectId,
+        'subjectName': subjectName,
+        'teacherId': teacherId,
+        'teacherName': teacherName,
+      };
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is StudentLesson &&
+          day == other.day &&
+          period == other.period &&
+          startTime == other.startTime &&
+          endTime == other.endTime &&
+          subjectId == other.subjectId &&
+          subjectName == other.subjectName &&
+          teacherId == other.teacherId &&
+          teacherName == other.teacherName;
+
+  @override
+  int get hashCode => _hashProps(<Object?>[
+        day,
+        period,
+        startTime,
+        endTime,
+        subjectId,
+        subjectName,
+        teacherId,
+        teacherName,
+      ]);
 }
 
 /// O'quvchining guruhi (`GET /student/groups`) — FAOL ham, tugagan/chiqilgan ham keladi.
@@ -253,23 +536,49 @@ class StudentGroupInfo {
     required this.leftAt,
   });
 
+  /// Normallashtirilgan holat: xom `status` ("completed") `state` sifatida kelsa
+  /// ham tugagan deb qaraladi. `state` bo'sh yoki notanish bo'lsa `null` —
+  /// bunday holatda XOM maydonlardan xulosa chiqariladi (`_fallbackCurrent`).
+  String? get _state => switch (state) {
+        'active' || 'trial' || 'frozen' || 'finished' => state,
+        'completed' => 'finished',
+        _ => null,
+      };
+
+  /// `state` yo'q/notanish bo'lgandagi zaxira mantiq — eski serverda ham bor
+  /// maydonlarga tayanadi. Guruh ASOSSIZ "yakunlangan"ga tushib yo'qolmasin.
+  bool get _fallbackCurrent => isActive && !groupArchived && leftAt.isEmpty;
+
   /// Hozir shu guruhda o'qiyaptimi (muzlatilgan ham "hozirgi" hisoblanadi — a'zolik saqlanadi).
-  bool get isCurrent => state != 'finished';
+  bool get isCurrent => switch (_state) {
+        final s? => s != 'finished',
+        // `state` yubormagan/notanish server — xom maydonlar bo'yicha.
+        null => _fallbackCurrent,
+      };
 
   /// O'quvchiga ko'rsatiladigan holat matni.
-  String get statusLabel => switch (state) {
+  String get statusLabel => switch (_state) {
         'frozen' => 'Muzlatilgan',
         'trial' => 'Sinov',
-        'finished' => groupArchived ? 'Guruh yopilgan' : (leftAt.isNotEmpty ? 'Chiqilgan' : 'Yakunlangan'),
-        _ => 'Aktiv',
+        'finished' => _finishedLabel,
+        'active' => 'Aktiv',
+        // `state` umuman kelmagan (eski server) — xom maydonlar bo'yicha xulosa.
+        null when state.isEmpty => _fallbackCurrent ? 'Aktiv' : _finishedLabel,
+        // `state` bor, lekin notanish qiymat ("paused") — neytral yorliq
+        // (noto'g'ri "Aktiv" ham, noto'g'ri "Yakunlangan" ham ko'rsatilmasin).
+        _ => 'Noma\'lum',
       };
+
+  String get _finishedLabel =>
+      groupArchived ? 'Guruh yopilgan' : (leftAt.isNotEmpty ? 'Chiqilgan' : 'Yakunlangan');
 
   factory StudentGroupInfo.fromJson(Map<String, dynamic> j) => StudentGroupInfo(
         groupId: _s(j['groupId']),
         name: _s(j['name']),
         courseName: _s(j['courseName']),
         teacherName: _s(j['teacherName']),
-        days: (j['days'] as List? ?? const []).map((e) => _i(e)).toList(),
+        // `as List?` cast qilmaymiz: ro'yxat o'rniga boshqa tur kelsa qulamasin.
+        days: j['days'] is List ? (j['days'] as List).map(_i).toList() : <int>[],
         startTime: _s(j['startTime']),
         endTime: _s(j['endTime']),
         room: _s(j['room']),
@@ -280,6 +589,61 @@ class StudentGroupInfo {
         joinedAt: _s(j['joinedAt']),
         leftAt: _s(j['leftAt']),
       );
+
+  /// `StudentGroupInfo.fromJson(x.toJson())` — qiymatni saqlaydigan aylanma (offline kesh uchun).
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'groupId': groupId,
+        'name': name,
+        'courseName': courseName,
+        'teacherName': teacherName,
+        'days': days,
+        'startTime': startTime,
+        'endTime': endTime,
+        'room': room,
+        'state': state,
+        'status': status,
+        'isActive': isActive,
+        'groupArchived': groupArchived,
+        'joinedAt': joinedAt,
+        'leftAt': leftAt,
+      };
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is StudentGroupInfo &&
+          groupId == other.groupId &&
+          name == other.name &&
+          courseName == other.courseName &&
+          teacherName == other.teacherName &&
+          _deepEq(days, other.days) &&
+          startTime == other.startTime &&
+          endTime == other.endTime &&
+          room == other.room &&
+          state == other.state &&
+          status == other.status &&
+          isActive == other.isActive &&
+          groupArchived == other.groupArchived &&
+          joinedAt == other.joinedAt &&
+          leftAt == other.leftAt;
+
+  @override
+  int get hashCode => _hashProps(<Object?>[
+        groupId,
+        name,
+        courseName,
+        teacherName,
+        days,
+        startTime,
+        endTime,
+        room,
+        state,
+        status,
+        isActive,
+        groupArchived,
+        joinedAt,
+        leftAt,
+      ]);
 }
 
 class StudentDashboard {
@@ -310,6 +674,40 @@ class StudentDashboard {
         balance: _d(j['balance']),
         monthlyFee: _d(j['monthlyFee']),
       );
+
+  /// `StudentDashboard.fromJson(x.toJson())` — qiymatni saqlaydigan aylanma (offline kesh uchun).
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'profile': profile.toJson(),
+        'meta': meta.toJson(),
+        'todayLessons': todayLessons.map((e) => e.toJson()).toList(),
+        'todayGrades': todayGrades.map((e) => e.toJson()).toList(),
+        'pendingAssignmentsCount': pendingAssignmentsCount,
+        'balance': balance,
+        'monthlyFee': monthlyFee,
+      };
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is StudentDashboard &&
+          profile == other.profile &&
+          meta == other.meta &&
+          _deepEq(todayLessons, other.todayLessons) &&
+          _deepEq(todayGrades, other.todayGrades) &&
+          pendingAssignmentsCount == other.pendingAssignmentsCount &&
+          balance == other.balance &&
+          monthlyFee == other.monthlyFee;
+
+  @override
+  int get hashCode => _hashProps(<Object?>[
+        profile,
+        meta,
+        todayLessons,
+        todayGrades,
+        pendingAssignmentsCount,
+        balance,
+        monthlyFee,
+      ]);
 }
 
 class SubjectRef {
@@ -319,6 +717,25 @@ class SubjectRef {
   SubjectRef({required this.id, required this.name});
 
   factory SubjectRef.fromJson(Map<String, dynamic> j) => SubjectRef(id: _s(j['id']), name: _s(j['name']));
+
+  /// `SubjectRef.fromJson(x.toJson())` — qiymatni saqlaydigan aylanma (offline kesh uchun).
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'id': id,
+        'name': name,
+      };
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is SubjectRef &&
+          id == other.id &&
+          name == other.name;
+
+  @override
+  int get hashCode => _hashProps(<Object?>[
+        id,
+        name,
+      ]);
 }
 
 class StudentAttendanceSummary {
@@ -343,6 +760,34 @@ class StudentAttendanceSummary {
         illnessLessons: _numMap(j['illnessLessons']),
         lateCount: _numMap(j['lateCount']),
       );
+
+  /// `StudentAttendanceSummary.fromJson(x.toJson())` — qiymatni saqlaydigan aylanma (offline kesh uchun).
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'missedDays': missedDays,
+        'illnessDays': illnessDays,
+        'missedLessons': missedLessons,
+        'illnessLessons': illnessLessons,
+        'lateCount': lateCount,
+      };
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is StudentAttendanceSummary &&
+          _deepEq(missedDays, other.missedDays) &&
+          _deepEq(illnessDays, other.illnessDays) &&
+          _deepEq(missedLessons, other.missedLessons) &&
+          _deepEq(illnessLessons, other.illnessLessons) &&
+          _deepEq(lateCount, other.lateCount);
+
+  @override
+  int get hashCode => _hashProps(<Object?>[
+        missedDays,
+        illnessDays,
+        missedLessons,
+        illnessLessons,
+        lateCount,
+      ]);
 }
 
 class StudentGradesReport {
@@ -373,6 +818,40 @@ class StudentGradesReport {
         grades: _nestedNumMap(j['grades']),
         attendance: StudentAttendanceSummary.fromJson(_map(j['attendance'])),
       );
+
+  /// `StudentGradesReport.fromJson(x.toJson())` — qiymatni saqlaydigan aylanma (offline kesh uchun).
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'studentId': studentId,
+        'fullName': fullName,
+        'className': className,
+        'homeroomTeacher': homeroomTeacher,
+        'subjects': subjects.map((e) => e.toJson()).toList(),
+        'grades': grades,
+        'attendance': attendance.toJson(),
+      };
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is StudentGradesReport &&
+          studentId == other.studentId &&
+          fullName == other.fullName &&
+          className == other.className &&
+          homeroomTeacher == other.homeroomTeacher &&
+          _deepEq(subjects, other.subjects) &&
+          _deepEq(grades, other.grades) &&
+          attendance == other.attendance;
+
+  @override
+  int get hashCode => _hashProps(<Object?>[
+        studentId,
+        fullName,
+        className,
+        homeroomTeacher,
+        subjects,
+        grades,
+        attendance,
+      ]);
 }
 
 class AbsenceRow {
@@ -406,6 +885,43 @@ class AbsenceRow {
         isLate: _b(j['isLate']),
         isIll: _b(j['isIll']),
       );
+
+  /// `AbsenceRow.fromJson(x.toJson())` — qiymatni saqlaydigan aylanma (offline kesh uchun).
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'date': date,
+        'period': period,
+        'subjectId': subjectId,
+        'subjectName': subjectName,
+        'reasonId': reasonId,
+        'reasonName': reasonName,
+        'isLate': isLate,
+        'isIll': isIll,
+      };
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is AbsenceRow &&
+          date == other.date &&
+          period == other.period &&
+          subjectId == other.subjectId &&
+          subjectName == other.subjectName &&
+          reasonId == other.reasonId &&
+          reasonName == other.reasonName &&
+          isLate == other.isLate &&
+          isIll == other.isIll;
+
+  @override
+  int get hashCode => _hashProps(<Object?>[
+        date,
+        period,
+        subjectId,
+        subjectName,
+        reasonId,
+        reasonName,
+        isLate,
+        isIll,
+      ]);
 }
 
 class StudentAttendanceFull {
@@ -418,6 +934,25 @@ class StudentAttendanceFull {
         summary: StudentAttendanceSummary.fromJson(_map(j['summary'])),
         rows: _list(j['rows'], AbsenceRow.fromJson),
       );
+
+  /// `StudentAttendanceFull.fromJson(x.toJson())` — qiymatni saqlaydigan aylanma (offline kesh uchun).
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'summary': summary.toJson(),
+        'rows': rows.map((e) => e.toJson()).toList(),
+      };
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is StudentAttendanceFull &&
+          summary == other.summary &&
+          _deepEq(rows, other.rows);
+
+  @override
+  int get hashCode => _hashProps(<Object?>[
+        summary,
+        rows,
+      ]);
 }
 
 class DisciplinePoint {
@@ -448,6 +983,40 @@ class DisciplinePoint {
         createdBy: _s(j['createdBy']),
         source: _s(j['source']),
       );
+
+  /// `DisciplinePoint.fromJson(x.toJson())` — qiymatni saqlaydigan aylanma (offline kesh uchun).
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'id': id,
+        'reasonName': reasonName,
+        'points': points,
+        'note': note,
+        'createdAt': createdAt,
+        'createdBy': createdBy,
+        'source': source,
+      };
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is DisciplinePoint &&
+          id == other.id &&
+          reasonName == other.reasonName &&
+          points == other.points &&
+          note == other.note &&
+          createdAt == other.createdAt &&
+          createdBy == other.createdBy &&
+          source == other.source;
+
+  @override
+  int get hashCode => _hashProps(<Object?>[
+        id,
+        reasonName,
+        points,
+        note,
+        createdAt,
+        createdBy,
+        source,
+      ]);
 }
 
 class StudentDiscipline {
@@ -464,6 +1033,31 @@ class StudentDiscipline {
         minus: _d(j['minus']),
         items: _list(j['items'], DisciplinePoint.fromJson),
       );
+
+  /// `StudentDiscipline.fromJson(x.toJson())` — qiymatni saqlaydigan aylanma (offline kesh uchun).
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'remaining': remaining,
+        'plus': plus,
+        'minus': minus,
+        'items': items.map((e) => e.toJson()).toList(),
+      };
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is StudentDiscipline &&
+          remaining == other.remaining &&
+          plus == other.plus &&
+          minus == other.minus &&
+          _deepEq(items, other.items);
+
+  @override
+  int get hashCode => _hashProps(<Object?>[
+        remaining,
+        plus,
+        minus,
+        items,
+      ]);
 }
 
 class RatingRow {
@@ -495,6 +1089,40 @@ class RatingRow {
         attendance: _dn(j['attendance']),
         ball: _dn(j['ball']),
       );
+
+  /// `RatingRow.fromJson(x.toJson())` — qiymatni saqlaydigan aylanma (offline kesh uchun).
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'rank': rank,
+        'studentId': studentId,
+        'fullName': fullName,
+        'className': className,
+        'average': average,
+        'attendance': attendance,
+        'ball': ball,
+      };
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is RatingRow &&
+          rank == other.rank &&
+          studentId == other.studentId &&
+          fullName == other.fullName &&
+          className == other.className &&
+          average == other.average &&
+          attendance == other.attendance &&
+          ball == other.ball;
+
+  @override
+  int get hashCode => _hashProps(<Object?>[
+        rank,
+        studentId,
+        fullName,
+        className,
+        average,
+        attendance,
+        ball,
+      ]);
 }
 
 class StudentRating {
@@ -519,6 +1147,34 @@ class StudentRating {
         meSchoolRank: _in(j['meSchoolRank']),
         schoolSize: _i(j['schoolSize']),
       );
+
+  /// `StudentRating.fromJson(x.toJson())` — qiymatni saqlaydigan aylanma (offline kesh uchun).
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'meStudentId': meStudentId,
+        'classRows': classRows.map((e) => e.toJson()).toList(),
+        'schoolRows': schoolRows.map((e) => e.toJson()).toList(),
+        'meSchoolRank': meSchoolRank,
+        'schoolSize': schoolSize,
+      };
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is StudentRating &&
+          meStudentId == other.meStudentId &&
+          _deepEq(classRows, other.classRows) &&
+          _deepEq(schoolRows, other.schoolRows) &&
+          meSchoolRank == other.meSchoolRank &&
+          schoolSize == other.schoolSize;
+
+  @override
+  int get hashCode => _hashProps(<Object?>[
+        meStudentId,
+        classRows,
+        schoolRows,
+        meSchoolRank,
+        schoolSize,
+      ]);
 }
 
 class SubjectProgress {
@@ -555,6 +1211,46 @@ class SubjectProgress {
         nextLessonDate: _sn(j['nextLessonDate']),
         lastLessonDate: _sn(j['lastLessonDate']),
       );
+
+  /// `SubjectProgress.fromJson(x.toJson())` — qiymatni saqlaydigan aylanma (offline kesh uchun).
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'subjectId': subjectId,
+        'subjectName': subjectName,
+        'planned': planned,
+        'conducted': conducted,
+        'remaining': remaining,
+        'percent': percent,
+        'expectedByToday': expectedByToday,
+        'nextLessonDate': nextLessonDate,
+        'lastLessonDate': lastLessonDate,
+      };
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is SubjectProgress &&
+          subjectId == other.subjectId &&
+          subjectName == other.subjectName &&
+          planned == other.planned &&
+          conducted == other.conducted &&
+          remaining == other.remaining &&
+          percent == other.percent &&
+          expectedByToday == other.expectedByToday &&
+          nextLessonDate == other.nextLessonDate &&
+          lastLessonDate == other.lastLessonDate;
+
+  @override
+  int get hashCode => _hashProps(<Object?>[
+        subjectId,
+        subjectName,
+        planned,
+        conducted,
+        remaining,
+        percent,
+        expectedByToday,
+        nextLessonDate,
+        lastLessonDate,
+      ]);
 }
 
 class StudentSubjectsProgress {
@@ -579,6 +1275,34 @@ class StudentSubjectsProgress {
         totalPercent: _d(j['totalPercent']),
         subjects: _list(j['subjects'], SubjectProgress.fromJson),
       );
+
+  /// `StudentSubjectsProgress.fromJson(x.toJson())` — qiymatni saqlaydigan aylanma (offline kesh uchun).
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'quarter': quarter,
+        'totalPlanned': totalPlanned,
+        'totalConducted': totalConducted,
+        'totalPercent': totalPercent,
+        'subjects': subjects.map((e) => e.toJson()).toList(),
+      };
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is StudentSubjectsProgress &&
+          quarter == other.quarter &&
+          totalPlanned == other.totalPlanned &&
+          totalConducted == other.totalConducted &&
+          totalPercent == other.totalPercent &&
+          _deepEq(subjects, other.subjects);
+
+  @override
+  int get hashCode => _hashProps(<Object?>[
+        quarter,
+        totalPlanned,
+        totalConducted,
+        totalPercent,
+        subjects,
+      ]);
 }
 
 class SubjectLesson {
@@ -612,6 +1336,43 @@ class SubjectLesson {
         conducted: _b(j['conducted']),
         isPast: _b(j['isPast']),
       );
+
+  /// `SubjectLesson.fromJson(x.toJson())` — qiymatni saqlaydigan aylanma (offline kesh uchun).
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'date': date,
+        'period': period,
+        'startTime': startTime,
+        'endTime': endTime,
+        'topic': topic,
+        'homework': homework,
+        'conducted': conducted,
+        'isPast': isPast,
+      };
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is SubjectLesson &&
+          date == other.date &&
+          period == other.period &&
+          startTime == other.startTime &&
+          endTime == other.endTime &&
+          topic == other.topic &&
+          homework == other.homework &&
+          conducted == other.conducted &&
+          isPast == other.isPast;
+
+  @override
+  int get hashCode => _hashProps(<Object?>[
+        date,
+        period,
+        startTime,
+        endTime,
+        topic,
+        homework,
+        conducted,
+        isPast,
+      ]);
 }
 
 class SubjectProgressDetail {
@@ -645,6 +1406,43 @@ class SubjectProgressDetail {
         percent: _d(j['percent']),
         lessons: _list(j['lessons'], SubjectLesson.fromJson),
       );
+
+  /// `SubjectProgressDetail.fromJson(x.toJson())` — qiymatni saqlaydigan aylanma (offline kesh uchun).
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'subjectId': subjectId,
+        'subjectName': subjectName,
+        'quarter': quarter,
+        'planned': planned,
+        'conducted': conducted,
+        'remaining': remaining,
+        'percent': percent,
+        'lessons': lessons.map((e) => e.toJson()).toList(),
+      };
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is SubjectProgressDetail &&
+          subjectId == other.subjectId &&
+          subjectName == other.subjectName &&
+          quarter == other.quarter &&
+          planned == other.planned &&
+          conducted == other.conducted &&
+          remaining == other.remaining &&
+          percent == other.percent &&
+          _deepEq(lessons, other.lessons);
+
+  @override
+  int get hashCode => _hashProps(<Object?>[
+        subjectId,
+        subjectName,
+        quarter,
+        planned,
+        conducted,
+        remaining,
+        percent,
+        lessons,
+      ]);
 }
 
 // ---------- Speaking (Azure talaffuz bahosi) ----------
@@ -660,6 +1458,28 @@ class SpeakingWord {
         accuracy: _d(j['accuracy']),
         errorType: _s(j['errorType']),
       );
+
+  /// `SpeakingWord.fromJson(x.toJson())` — qiymatni saqlaydigan aylanma (offline kesh uchun).
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'word': word,
+        'accuracy': accuracy,
+        'errorType': errorType,
+      };
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is SpeakingWord &&
+          word == other.word &&
+          accuracy == other.accuracy &&
+          errorType == other.errorType;
+
+  @override
+  int get hashCode => _hashProps(<Object?>[
+        word,
+        accuracy,
+        errorType,
+      ]);
 }
 
 class MonthCourse {
@@ -672,6 +1492,25 @@ class MonthCourse {
         courseName: _s(j['courseName']),
         fee: _d(j['fee']),
       );
+
+  /// `MonthCourse.fromJson(x.toJson())` — qiymatni saqlaydigan aylanma (offline kesh uchun).
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'courseName': courseName,
+        'fee': fee,
+      };
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is MonthCourse &&
+          courseName == other.courseName &&
+          fee == other.fee;
+
+  @override
+  int get hashCode => _hashProps(<Object?>[
+        courseName,
+        fee,
+      ]);
 }
 
 class MonthLedger {
@@ -702,6 +1541,40 @@ class MonthLedger {
         status: _s(j['status']),
         courses: _list(j['courses'], MonthCourse.fromJson),
       );
+
+  /// `MonthLedger.fromJson(x.toJson())` — qiymatni saqlaydigan aylanma (offline kesh uchun).
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'month': month,
+        'charged': charged,
+        'discount': discount,
+        'paid': paid,
+        'remaining': remaining,
+        'status': status,
+        'courses': courses.map((e) => e.toJson()).toList(),
+      };
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is MonthLedger &&
+          month == other.month &&
+          charged == other.charged &&
+          discount == other.discount &&
+          paid == other.paid &&
+          remaining == other.remaining &&
+          status == other.status &&
+          _deepEq(courses, other.courses);
+
+  @override
+  int get hashCode => _hashProps(<Object?>[
+        month,
+        charged,
+        discount,
+        paid,
+        remaining,
+        status,
+        courses,
+      ]);
 }
 
 class StudentPayment {
@@ -720,6 +1593,34 @@ class StudentPayment {
         month: _sn(j['month']),
         comment: _sn(j['comment']),
       );
+
+  /// `StudentPayment.fromJson(x.toJson())` — qiymatni saqlaydigan aylanma (offline kesh uchun).
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'date': date,
+        'amount': amount,
+        'note': note,
+        'month': month,
+        'comment': comment,
+      };
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is StudentPayment &&
+          date == other.date &&
+          amount == other.amount &&
+          note == other.note &&
+          month == other.month &&
+          comment == other.comment;
+
+  @override
+  int get hashCode => _hashProps(<Object?>[
+        date,
+        amount,
+        note,
+        month,
+        comment,
+      ]);
 }
 
 class StudentFinanceStudent {
@@ -734,6 +1635,28 @@ class StudentFinanceStudent {
         fullName: _s(j['fullName']),
         className: _s(j['className']),
       );
+
+  /// `StudentFinanceStudent.fromJson(x.toJson())` — qiymatni saqlaydigan aylanma (offline kesh uchun).
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'id': id,
+        'fullName': fullName,
+        'className': className,
+      };
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is StudentFinanceStudent &&
+          id == other.id &&
+          fullName == other.fullName &&
+          className == other.className;
+
+  @override
+  int get hashCode => _hashProps(<Object?>[
+        id,
+        fullName,
+        className,
+      ]);
 }
 
 class StudentFinance {
@@ -767,6 +1690,43 @@ class StudentFinance {
         months: _list(j['months'], MonthLedger.fromJson),
         payments: _list(j['payments'], StudentPayment.fromJson),
       );
+
+  /// `StudentFinance.fromJson(x.toJson())` — qiymatni saqlaydigan aylanma (offline kesh uchun).
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'student': student.toJson(),
+        'balance': balance,
+        'monthlyFee': monthlyFee,
+        'totalCharged': totalCharged,
+        'totalDiscount': totalDiscount,
+        'totalPaid': totalPaid,
+        'months': months.map((e) => e.toJson()).toList(),
+        'payments': payments.map((e) => e.toJson()).toList(),
+      };
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is StudentFinance &&
+          student == other.student &&
+          balance == other.balance &&
+          monthlyFee == other.monthlyFee &&
+          totalCharged == other.totalCharged &&
+          totalDiscount == other.totalDiscount &&
+          totalPaid == other.totalPaid &&
+          _deepEq(months, other.months) &&
+          _deepEq(payments, other.payments);
+
+  @override
+  int get hashCode => _hashProps(<Object?>[
+        student,
+        balance,
+        monthlyFee,
+        totalCharged,
+        totalDiscount,
+        totalPaid,
+        months,
+        payments,
+      ]);
 }
 
 class StudentChatMessage {
@@ -797,6 +1757,40 @@ class StudentChatMessage {
         text: _s(j['text']),
         createdAt: _s(j['createdAt']),
       );
+
+  /// `StudentChatMessage.fromJson(x.toJson())` — qiymatni saqlaydigan aylanma (offline kesh uchun).
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'id': id,
+        'className': className,
+        'senderUserId': senderUserId,
+        'senderName': senderName,
+        'senderRole': senderRole,
+        'text': text,
+        'createdAt': createdAt,
+      };
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is StudentChatMessage &&
+          id == other.id &&
+          className == other.className &&
+          senderUserId == other.senderUserId &&
+          senderName == other.senderName &&
+          senderRole == other.senderRole &&
+          text == other.text &&
+          createdAt == other.createdAt;
+
+  @override
+  int get hashCode => _hashProps(<Object?>[
+        id,
+        className,
+        senderUserId,
+        senderName,
+        senderRole,
+        text,
+        createdAt,
+      ]);
 }
 
 class UserSettings {
@@ -811,6 +1805,28 @@ class UserSettings {
         theme: _s(j['theme']),
         notificationsEnabled: _b(j['notificationsEnabled']),
       );
+
+  /// `UserSettings.fromJson(x.toJson())` — qiymatni saqlaydigan aylanma (offline kesh uchun).
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'language': language,
+        'theme': theme,
+        'notificationsEnabled': notificationsEnabled,
+      };
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is UserSettings &&
+          language == other.language &&
+          theme == other.theme &&
+          notificationsEnabled == other.notificationsEnabled;
+
+  @override
+  int get hashCode => _hashProps(<Object?>[
+        language,
+        theme,
+        notificationsEnabled,
+      ]);
 }
 
 class TelegramStatus {
@@ -835,6 +1851,34 @@ class TelegramStatus {
         deepLink: _s(j['deepLink']),
         registered: _b(j['registered']),
       );
+
+  /// `TelegramStatus.fromJson(x.toJson())` — qiymatni saqlaydigan aylanma (offline kesh uchun).
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'configured': configured,
+        'botUsername': botUsername,
+        'botName': botName,
+        'deepLink': deepLink,
+        'registered': registered,
+      };
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is TelegramStatus &&
+          configured == other.configured &&
+          botUsername == other.botUsername &&
+          botName == other.botName &&
+          deepLink == other.deepLink &&
+          registered == other.registered;
+
+  @override
+  int get hashCode => _hashProps(<Object?>[
+        configured,
+        botUsername,
+        botName,
+        deepLink,
+        registered,
+      ]);
 }
 
 class StudentLocation {
@@ -851,6 +1895,31 @@ class StudentLocation {
         address: _sn(j['address']),
         updatedAt: _sn(j['updatedAt']),
       );
+
+  /// `StudentLocation.fromJson(x.toJson())` — qiymatni saqlaydigan aylanma (offline kesh uchun).
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'latitude': latitude,
+        'longitude': longitude,
+        'address': address,
+        'updatedAt': updatedAt,
+      };
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is StudentLocation &&
+          latitude == other.latitude &&
+          longitude == other.longitude &&
+          address == other.address &&
+          updatedAt == other.updatedAt;
+
+  @override
+  int get hashCode => _hashProps(<Object?>[
+        latitude,
+        longitude,
+        address,
+        updatedAt,
+      ]);
 }
 
 class StudentSchoolInfo {
@@ -863,6 +1932,25 @@ class StudentSchoolInfo {
         name: _s(j['name']),
         telegramChannel: _s(j['telegramChannel']),
       );
+
+  /// `StudentSchoolInfo.fromJson(x.toJson())` — qiymatni saqlaydigan aylanma (offline kesh uchun).
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'name': name,
+        'telegramChannel': telegramChannel,
+      };
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is StudentSchoolInfo &&
+          name == other.name &&
+          telegramChannel == other.telegramChannel;
+
+  @override
+  int get hashCode => _hashProps(<Object?>[
+        name,
+        telegramChannel,
+      ]);
 }
 
 // ---------- O'quv dasturi (curriculum roadmap) ----------
@@ -891,6 +1979,37 @@ class CurriculumItem {
         covered: _b(j['covered']),
         coveredDate: _s(j['coveredDate']),
       );
+
+  /// `CurriculumItem.fromJson(x.toJson())` — qiymatni saqlaydigan aylanma (offline kesh uchun).
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'id': id,
+        'text': text,
+        'note': note,
+        'order': order,
+        'covered': covered,
+        'coveredDate': coveredDate,
+      };
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is CurriculumItem &&
+          id == other.id &&
+          text == other.text &&
+          note == other.note &&
+          order == other.order &&
+          covered == other.covered &&
+          coveredDate == other.coveredDate;
+
+  @override
+  int get hashCode => _hashProps(<Object?>[
+        id,
+        text,
+        note,
+        order,
+        covered,
+        coveredDate,
+      ]);
 }
 
 class CurriculumTopic {
@@ -915,6 +2034,34 @@ class CurriculumTopic {
         order: _i(j['order']),
         items: _list(j['items'], CurriculumItem.fromJson),
       );
+
+  /// `CurriculumTopic.fromJson(x.toJson())` — qiymatni saqlaydigan aylanma (offline kesh uchun).
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'id': id,
+        'title': title,
+        'note': note,
+        'order': order,
+        'items': items.map((e) => e.toJson()).toList(),
+      };
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is CurriculumTopic &&
+          id == other.id &&
+          title == other.title &&
+          note == other.note &&
+          order == other.order &&
+          _deepEq(items, other.items);
+
+  @override
+  int get hashCode => _hashProps(<Object?>[
+        id,
+        title,
+        note,
+        order,
+        items,
+      ]);
 }
 
 class CurriculumLevel {
@@ -939,6 +2086,34 @@ class CurriculumLevel {
         order: _i(j['order']),
         topics: _list(j['topics'], CurriculumTopic.fromJson),
       );
+
+  /// `CurriculumLevel.fromJson(x.toJson())` — qiymatni saqlaydigan aylanma (offline kesh uchun).
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'id': id,
+        'name': name,
+        'note': note,
+        'order': order,
+        'topics': topics.map((e) => e.toJson()).toList(),
+      };
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is CurriculumLevel &&
+          id == other.id &&
+          name == other.name &&
+          note == other.note &&
+          order == other.order &&
+          _deepEq(topics, other.topics);
+
+  @override
+  int get hashCode => _hashProps(<Object?>[
+        id,
+        name,
+        note,
+        order,
+        topics,
+      ]);
 }
 
 class StudentCurriculum {
@@ -983,8 +2158,62 @@ class StudentCurriculum {
         lessonsPerWeek: _i(j['lessonsPerWeek']),
         estFinishDate: _s(j['estFinishDate']),
         // Server `modules` deb qaytaradi (GroupCurriculumDto.Modules); `levels` — eski nom.
-        levels: _list(j['levels'] ?? j['modules'], CurriculumLevel.fromJson),
+        // `??` yetarli emas: bo'sh RO'YXAT null emas, shuning uchun ikkalasi ham
+        // kelganda (levels: [], modules: [...]) ekran bo'sh qolardi.
+        levels: () {
+          final lv = _list(j['levels'], CurriculumLevel.fromJson);
+          return lv.isNotEmpty ? lv : _list(j['modules'], CurriculumLevel.fromJson);
+        }(),
       );
+
+  /// `StudentCurriculum.fromJson(x.toJson())` — qiymatni saqlaydigan aylanma (offline kesh uchun).
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'groupId': groupId,
+        'courseId': courseId,
+        'courseName': courseName,
+        'totalItems': totalItems,
+        'coveredCount': coveredCount,
+        'revisionLessons': revisionLessons,
+        'totalLessons': totalLessons,
+        'remainingItems': remainingItems,
+        'estLessonsLeft': estLessonsLeft,
+        'lessonsPerWeek': lessonsPerWeek,
+        'estFinishDate': estFinishDate,
+        'levels': levels.map((e) => e.toJson()).toList(),
+      };
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is StudentCurriculum &&
+          groupId == other.groupId &&
+          courseId == other.courseId &&
+          courseName == other.courseName &&
+          totalItems == other.totalItems &&
+          coveredCount == other.coveredCount &&
+          revisionLessons == other.revisionLessons &&
+          totalLessons == other.totalLessons &&
+          remainingItems == other.remainingItems &&
+          estLessonsLeft == other.estLessonsLeft &&
+          lessonsPerWeek == other.lessonsPerWeek &&
+          estFinishDate == other.estFinishDate &&
+          _deepEq(levels, other.levels);
+
+  @override
+  int get hashCode => _hashProps(<Object?>[
+        groupId,
+        courseId,
+        courseName,
+        totalItems,
+        coveredCount,
+        revisionLessons,
+        totalLessons,
+        remainingItems,
+        estLessonsLeft,
+        lessonsPerWeek,
+        estFinishDate,
+        levels,
+      ]);
 }
 
 // ---------- Baholash statistikasi (oylik + har darslik) ----------
@@ -1002,6 +2231,31 @@ class StudentGradingCriterion {
         done: _i(j['done']),
         total: _i(j['total']),
       );
+
+  /// `StudentGradingCriterion.fromJson(x.toJson())` — qiymatni saqlaydigan aylanma (offline kesh uchun).
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'id': id,
+        'name': name,
+        'done': done,
+        'total': total,
+      };
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is StudentGradingCriterion &&
+          id == other.id &&
+          name == other.name &&
+          done == other.done &&
+          total == other.total;
+
+  @override
+  int get hashCode => _hashProps(<Object?>[
+        id,
+        name,
+        done,
+        total,
+      ]);
 }
 
 class StudentGradingDate {
@@ -1014,6 +2268,25 @@ class StudentGradingDate {
         date: _s(j['date']),
         doneCriterionIds: _strList(j['doneCriterionIds']),
       );
+
+  /// `StudentGradingDate.fromJson(x.toJson())` — qiymatni saqlaydigan aylanma (offline kesh uchun).
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'date': date,
+        'doneCriterionIds': doneCriterionIds,
+      };
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is StudentGradingDate &&
+          date == other.date &&
+          _deepEq(doneCriterionIds, other.doneCriterionIds);
+
+  @override
+  int get hashCode => _hashProps(<Object?>[
+        date,
+        doneCriterionIds,
+      ]);
 }
 
 class StudentGradingGroup {
@@ -1052,6 +2325,46 @@ class StudentGradingGroup {
         monthBall: _dn(j['monthBall']),
         totalBall: _dn(j['totalBall']),
       );
+
+  /// `StudentGradingGroup.fromJson(x.toJson())` — qiymatni saqlaydigan aylanma (offline kesh uchun).
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'groupId': groupId,
+        'groupName': groupName,
+        'months': months,
+        'month': month,
+        'dates': dates,
+        'criteria': criteria.map((e) => e.toJson()).toList(),
+        'lessons': lessons.map((e) => e.toJson()).toList(),
+        'monthBall': monthBall,
+        'totalBall': totalBall,
+      };
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is StudentGradingGroup &&
+          groupId == other.groupId &&
+          groupName == other.groupName &&
+          _deepEq(months, other.months) &&
+          month == other.month &&
+          _deepEq(dates, other.dates) &&
+          _deepEq(criteria, other.criteria) &&
+          _deepEq(lessons, other.lessons) &&
+          monthBall == other.monthBall &&
+          totalBall == other.totalBall;
+
+  @override
+  int get hashCode => _hashProps(<Object?>[
+        groupId,
+        groupName,
+        months,
+        month,
+        dates,
+        criteria,
+        lessons,
+        monthBall,
+        totalBall,
+      ]);
 }
 
 // ---------- Dars kontenti (Duolingo node bosilganda) ----------
@@ -1065,6 +2378,25 @@ class LessonVocab {
         term: _s(j['term']),
         meaning: _s(j['meaning']),
       );
+
+  /// `LessonVocab.fromJson(x.toJson())` — qiymatni saqlaydigan aylanma (offline kesh uchun).
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'term': term,
+        'meaning': meaning,
+      };
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is LessonVocab &&
+          term == other.term &&
+          meaning == other.meaning;
+
+  @override
+  int get hashCode => _hashProps(<Object?>[
+        term,
+        meaning,
+      ]);
 }
 
 class LessonQuestion {
@@ -1081,6 +2413,31 @@ class LessonQuestion {
         options: _strList(j['options']),
         correctIndex: _i(j['correctIndex']),
       );
+
+  /// `LessonQuestion.fromJson(x.toJson())` — qiymatni saqlaydigan aylanma (offline kesh uchun).
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'id': id,
+        'text': text,
+        'options': options,
+        'correctIndex': correctIndex,
+      };
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is LessonQuestion &&
+          id == other.id &&
+          text == other.text &&
+          _deepEq(options, other.options) &&
+          correctIndex == other.correctIndex;
+
+  @override
+  int get hashCode => _hashProps(<Object?>[
+        id,
+        text,
+        options,
+        correctIndex,
+      ]);
 }
 
 /// type: 'text' | 'video' | 'audio' | 'vocab' | 'test' | 'pdf'
@@ -1141,6 +2498,67 @@ class LessonContent {
         exerciseKind: _s(j['exerciseKind']),
         exerciseJson: _s(j['exerciseJson']),
       );
+
+  /// `LessonContent.fromJson(x.toJson())` — qiymatni saqlaydigan aylanma (offline kesh uchun).
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'id': id,
+        'topicId': topicId,
+        'text': text,
+        'note': note,
+        'order': order,
+        'type': type,
+        'videoUrl': videoUrl,
+        'audioUrl': audioUrl,
+        'textContent': textContent,
+        'pdfUrl': pdfUrl,
+        'pdfName': pdfName,
+        'meta': meta,
+        'vocab': vocab.map((e) => e.toJson()).toList(),
+        'questions': questions.map((e) => e.toJson()).toList(),
+        'exerciseKind': exerciseKind,
+        'exerciseJson': exerciseJson,
+      };
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is LessonContent &&
+          id == other.id &&
+          topicId == other.topicId &&
+          text == other.text &&
+          note == other.note &&
+          order == other.order &&
+          type == other.type &&
+          videoUrl == other.videoUrl &&
+          audioUrl == other.audioUrl &&
+          textContent == other.textContent &&
+          pdfUrl == other.pdfUrl &&
+          pdfName == other.pdfName &&
+          meta == other.meta &&
+          _deepEq(vocab, other.vocab) &&
+          _deepEq(questions, other.questions) &&
+          exerciseKind == other.exerciseKind &&
+          exerciseJson == other.exerciseJson;
+
+  @override
+  int get hashCode => _hashProps(<Object?>[
+        id,
+        topicId,
+        text,
+        note,
+        order,
+        type,
+        videoUrl,
+        audioUrl,
+        textContent,
+        pdfUrl,
+        pdfName,
+        meta,
+        vocab,
+        questions,
+        exerciseKind,
+        exerciseJson,
+      ]);
 }
 
 // ---------- Daftar (notebook) ----------
@@ -1166,6 +2584,34 @@ class AttendanceReasonCount {
         isLate: _b(j['isLate']),
         count: _i(j['count']),
       );
+
+  /// `AttendanceReasonCount.fromJson(x.toJson())` — qiymatni saqlaydigan aylanma (offline kesh uchun).
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'reasonId': reasonId,
+        'name': name,
+        'short': short,
+        'isLate': isLate,
+        'count': count,
+      };
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is AttendanceReasonCount &&
+          reasonId == other.reasonId &&
+          name == other.name &&
+          short == other.short &&
+          isLate == other.isLate &&
+          count == other.count;
+
+  @override
+  int get hashCode => _hashProps(<Object?>[
+        reasonId,
+        name,
+        short,
+        isLate,
+        count,
+      ]);
 }
 
 class MonthlyAttendance {
@@ -1190,6 +2636,34 @@ class MonthlyAttendance {
         illnessLessons: _numMap(j['illnessLessons']),
         lateCount: _numMap(j['lateCount']),
       );
+
+  /// `MonthlyAttendance.fromJson(x.toJson())` — qiymatni saqlaydigan aylanma (offline kesh uchun).
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'missedDays': missedDays,
+        'illnessDays': illnessDays,
+        'missedLessons': missedLessons,
+        'illnessLessons': illnessLessons,
+        'lateCount': lateCount,
+      };
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is MonthlyAttendance &&
+          _deepEq(missedDays, other.missedDays) &&
+          _deepEq(illnessDays, other.illnessDays) &&
+          _deepEq(missedLessons, other.missedLessons) &&
+          _deepEq(illnessLessons, other.illnessLessons) &&
+          _deepEq(lateCount, other.lateCount);
+
+  @override
+  int get hashCode => _hashProps(<Object?>[
+        missedDays,
+        illnessDays,
+        missedLessons,
+        illnessLessons,
+        lateCount,
+      ]);
 }
 
 class MonthlyEvaluation {
@@ -1204,6 +2678,28 @@ class MonthlyEvaluation {
         grades: _numMap(j['grades']),
         avg: _d(j['avg']),
       );
+
+  /// `MonthlyEvaluation.fromJson(x.toJson())` — qiymatni saqlaydigan aylanma (offline kesh uchun).
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'month': month,
+        'grades': grades,
+        'avg': avg,
+      };
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is MonthlyEvaluation &&
+          month == other.month &&
+          _deepEq(grades, other.grades) &&
+          avg == other.avg;
+
+  @override
+  int get hashCode => _hashProps(<Object?>[
+        month,
+        grades,
+        avg,
+      ]);
 }
 
 class SubjectEvaluation {
@@ -1225,6 +2721,31 @@ class SubjectEvaluation {
         avg: _d(j['avg']),
         evaluations: _list(j['evaluations'], MonthlyEvaluation.fromJson),
       );
+
+  /// `SubjectEvaluation.fromJson(x.toJson())` — qiymatni saqlaydigan aylanma (offline kesh uchun).
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'subjectId': subjectId,
+        'subjectName': subjectName,
+        'avg': avg,
+        'evaluations': evaluations.map((e) => e.toJson()).toList(),
+      };
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is SubjectEvaluation &&
+          subjectId == other.subjectId &&
+          subjectName == other.subjectName &&
+          avg == other.avg &&
+          _deepEq(evaluations, other.evaluations);
+
+  @override
+  int get hashCode => _hashProps(<Object?>[
+        subjectId,
+        subjectName,
+        avg,
+        evaluations,
+      ]);
 }
 
 class MonthMarks {
@@ -1249,6 +2770,34 @@ class MonthMarks {
         behaviorGood: _i(j['behaviorGood']),
         behaviorBad: _i(j['behaviorBad']),
       );
+
+  /// `MonthMarks.fromJson(x.toJson())` — qiymatni saqlaydigan aylanma (offline kesh uchun).
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'month': month,
+        'homeworkDone': homeworkDone,
+        'homeworkMissed': homeworkMissed,
+        'behaviorGood': behaviorGood,
+        'behaviorBad': behaviorBad,
+      };
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is MonthMarks &&
+          month == other.month &&
+          homeworkDone == other.homeworkDone &&
+          homeworkMissed == other.homeworkMissed &&
+          behaviorGood == other.behaviorGood &&
+          behaviorBad == other.behaviorBad;
+
+  @override
+  int get hashCode => _hashProps(<Object?>[
+        month,
+        homeworkDone,
+        homeworkMissed,
+        behaviorGood,
+        behaviorBad,
+      ]);
 }
 
 class NotebookAssignmentScore {
@@ -1279,6 +2828,40 @@ class NotebookAssignmentScore {
         score: _dn(j['score']),
         completed: _b(j['completed']),
       );
+
+  /// `NotebookAssignmentScore.fromJson(x.toJson())` — qiymatni saqlaydigan aylanma (offline kesh uchun).
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'assignmentId': assignmentId,
+        'subjectName': subjectName,
+        'title': title,
+        'format': format,
+        'maxScore': maxScore,
+        'score': score,
+        'completed': completed,
+      };
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is NotebookAssignmentScore &&
+          assignmentId == other.assignmentId &&
+          subjectName == other.subjectName &&
+          title == other.title &&
+          format == other.format &&
+          maxScore == other.maxScore &&
+          score == other.score &&
+          completed == other.completed;
+
+  @override
+  int get hashCode => _hashProps(<Object?>[
+        assignmentId,
+        subjectName,
+        title,
+        format,
+        maxScore,
+        score,
+        completed,
+      ]);
 }
 
 class NotebookAssignments {
@@ -1303,6 +2886,34 @@ class NotebookAssignments {
         totalMax: _d(j['totalMax']),
         items: _list(j['items'], NotebookAssignmentScore.fromJson),
       );
+
+  /// `NotebookAssignments.fromJson(x.toJson())` — qiymatni saqlaydigan aylanma (offline kesh uchun).
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'count': count,
+        'gradedCount': gradedCount,
+        'totalScore': totalScore,
+        'totalMax': totalMax,
+        'items': items.map((e) => e.toJson()).toList(),
+      };
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is NotebookAssignments &&
+          count == other.count &&
+          gradedCount == other.gradedCount &&
+          totalScore == other.totalScore &&
+          totalMax == other.totalMax &&
+          _deepEq(items, other.items);
+
+  @override
+  int get hashCode => _hashProps(<Object?>[
+        count,
+        gradedCount,
+        totalScore,
+        totalMax,
+        items,
+      ]);
 }
 
 class NotebookDisciplinePoint {
@@ -1330,6 +2941,37 @@ class NotebookDisciplinePoint {
         createdAt: _s(j['createdAt']),
         source: _s(j['source']),
       );
+
+  /// `NotebookDisciplinePoint.fromJson(x.toJson())` — qiymatni saqlaydigan aylanma (offline kesh uchun).
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'id': id,
+        'reasonName': reasonName,
+        'points': points,
+        'note': note,
+        'createdAt': createdAt,
+        'source': source,
+      };
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is NotebookDisciplinePoint &&
+          id == other.id &&
+          reasonName == other.reasonName &&
+          points == other.points &&
+          note == other.note &&
+          createdAt == other.createdAt &&
+          source == other.source;
+
+  @override
+  int get hashCode => _hashProps(<Object?>[
+        id,
+        reasonName,
+        points,
+        note,
+        createdAt,
+        source,
+      ]);
 }
 
 class EvaluationType {
@@ -1339,6 +2981,25 @@ class EvaluationType {
   EvaluationType({required this.id, required this.name});
 
   factory EvaluationType.fromJson(Map<String, dynamic> j) => EvaluationType(id: _s(j['id']), name: _s(j['name']));
+
+  /// `EvaluationType.fromJson(x.toJson())` — qiymatni saqlaydigan aylanma (offline kesh uchun).
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'id': id,
+        'name': name,
+      };
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is EvaluationType &&
+          id == other.id &&
+          name == other.name;
+
+  @override
+  int get hashCode => _hashProps(<Object?>[
+        id,
+        name,
+      ]);
 }
 
 class StudentNotebook {
@@ -1424,6 +3085,94 @@ class StudentNotebook {
         behaviorBad: _i(j['behaviorBad']),
         marksTrend: _list(j['marksTrend'], MonthMarks.fromJson),
       );
+
+  /// `StudentNotebook.fromJson(x.toJson())` — qiymatni saqlaydigan aylanma (offline kesh uchun).
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'id': id,
+        'fullName': fullName,
+        'className': className,
+        'balance': balance,
+        'avgGrade': avgGrade,
+        'subjects': subjects.map((e) => e.toJson()).toList(),
+        'grades': grades,
+        'attendance': attendance.toJson(),
+        'conducted': conducted,
+        'attended': attended,
+        'attendancePct': attendancePct,
+        'reasons': reasons.map((e) => e.toJson()).toList(),
+        'disciplineScore': disciplineScore,
+        'disciplinePlus': disciplinePlus,
+        'disciplineMinus': disciplineMinus,
+        'disciplinePoints': disciplinePoints.map((e) => e.toJson()).toList(),
+        'assignments': assignments.toJson(),
+        'evaluationTypes': evaluationTypes.map((e) => e.toJson()).toList(),
+        'evaluations': evaluations.map((e) => e.toJson()).toList(),
+        'evaluationsBySubject': evaluationsBySubject.map((e) => e.toJson()).toList(),
+        'homeworkDone': homeworkDone,
+        'homeworkMissed': homeworkMissed,
+        'behaviorGood': behaviorGood,
+        'behaviorBad': behaviorBad,
+        'marksTrend': marksTrend.map((e) => e.toJson()).toList(),
+      };
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is StudentNotebook &&
+          id == other.id &&
+          fullName == other.fullName &&
+          className == other.className &&
+          balance == other.balance &&
+          avgGrade == other.avgGrade &&
+          _deepEq(subjects, other.subjects) &&
+          _deepEq(grades, other.grades) &&
+          attendance == other.attendance &&
+          conducted == other.conducted &&
+          attended == other.attended &&
+          attendancePct == other.attendancePct &&
+          _deepEq(reasons, other.reasons) &&
+          disciplineScore == other.disciplineScore &&
+          disciplinePlus == other.disciplinePlus &&
+          disciplineMinus == other.disciplineMinus &&
+          _deepEq(disciplinePoints, other.disciplinePoints) &&
+          assignments == other.assignments &&
+          _deepEq(evaluationTypes, other.evaluationTypes) &&
+          _deepEq(evaluations, other.evaluations) &&
+          _deepEq(evaluationsBySubject, other.evaluationsBySubject) &&
+          homeworkDone == other.homeworkDone &&
+          homeworkMissed == other.homeworkMissed &&
+          behaviorGood == other.behaviorGood &&
+          behaviorBad == other.behaviorBad &&
+          _deepEq(marksTrend, other.marksTrend);
+
+  @override
+  int get hashCode => _hashProps(<Object?>[
+        id,
+        fullName,
+        className,
+        balance,
+        avgGrade,
+        subjects,
+        grades,
+        attendance,
+        conducted,
+        attended,
+        attendancePct,
+        reasons,
+        disciplineScore,
+        disciplinePlus,
+        disciplineMinus,
+        disciplinePoints,
+        assignments,
+        evaluationTypes,
+        evaluations,
+        evaluationsBySubject,
+        homeworkDone,
+        homeworkMissed,
+        behaviorGood,
+        behaviorBad,
+        marksTrend,
+      ]);
 }
 
 // ---------- Bildirishnomalar ----------
@@ -1455,6 +3204,40 @@ class AppNotification {
         read: _b(j['read']),
         confirmed: _b(j['confirmed']),
       );
+
+  /// `AppNotification.fromJson(x.toJson())` — qiymatni saqlaydigan aylanma (offline kesh uchun).
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'id': id,
+        'title': title,
+        'body': body,
+        'type': type,
+        'createdAt': createdAt,
+        'read': read,
+        'confirmed': confirmed,
+      };
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is AppNotification &&
+          id == other.id &&
+          title == other.title &&
+          body == other.body &&
+          type == other.type &&
+          createdAt == other.createdAt &&
+          read == other.read &&
+          confirmed == other.confirmed;
+
+  @override
+  int get hashCode => _hashProps(<Object?>[
+        id,
+        title,
+        body,
+        type,
+        createdAt,
+        read,
+        confirmed,
+      ]);
 }
 
 class NotificationsResponse {
@@ -1467,6 +3250,25 @@ class NotificationsResponse {
         unread: _i(j['unread']),
         items: _list(j['items'], AppNotification.fromJson),
       );
+
+  /// `NotificationsResponse.fromJson(x.toJson())` — qiymatni saqlaydigan aylanma (offline kesh uchun).
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'unread': unread,
+        'items': items.map((e) => e.toJson()).toList(),
+      };
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is NotificationsResponse &&
+          unread == other.unread &&
+          _deepEq(items, other.items);
+
+  @override
+  int get hashCode => _hashProps(<Object?>[
+        unread,
+        items,
+      ]);
 }
 
 // ---------- Sertifikatlar ----------
@@ -1504,6 +3306,46 @@ class StudentCertificateDto {
         downloadCount: _i(j['downloadCount']),
         metadata: _strMap(j['metadata']),
       );
+
+  /// `StudentCertificateDto.fromJson(x.toJson())` — qiymatni saqlaydigan aylanma (offline kesh uchun).
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'id': id,
+        'courseName': courseName,
+        'issuedAt': issuedAt,
+        'expiresAt': expiresAt,
+        'status': status,
+        'fileName': fileName,
+        'downloadUrl': downloadUrl,
+        'downloadCount': downloadCount,
+        'metadata': metadata,
+      };
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is StudentCertificateDto &&
+          id == other.id &&
+          courseName == other.courseName &&
+          issuedAt == other.issuedAt &&
+          expiresAt == other.expiresAt &&
+          status == other.status &&
+          fileName == other.fileName &&
+          downloadUrl == other.downloadUrl &&
+          downloadCount == other.downloadCount &&
+          _deepEq(metadata, other.metadata);
+
+  @override
+  int get hashCode => _hashProps(<Object?>[
+        id,
+        courseName,
+        issuedAt,
+        expiresAt,
+        status,
+        fileName,
+        downloadUrl,
+        downloadCount,
+        metadata,
+      ]);
 }
 
 /// Test natijasi — O'quv bo'limi "Testlar natijalari"dan (o'qituvchi kiritadi). Web: `StudentTestResult`.
@@ -1541,6 +3383,46 @@ class StudentTestResult {
         rank: _i(j['rank']),
         total: _i(j['total']),
       );
+
+  /// `StudentTestResult.fromJson(x.toJson())` — qiymatni saqlaydigan aylanma (offline kesh uchun).
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'testId': testId,
+        'groupId': groupId,
+        'groupName': groupName,
+        'name': name,
+        'date': date,
+        'maxScore': maxScore,
+        'score': score,
+        'rank': rank,
+        'total': total,
+      };
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is StudentTestResult &&
+          testId == other.testId &&
+          groupId == other.groupId &&
+          groupName == other.groupName &&
+          name == other.name &&
+          date == other.date &&
+          maxScore == other.maxScore &&
+          score == other.score &&
+          rank == other.rank &&
+          total == other.total;
+
+  @override
+  int get hashCode => _hashProps(<Object?>[
+        testId,
+        groupId,
+        groupName,
+        name,
+        date,
+        maxScore,
+        score,
+        rank,
+        total,
+      ]);
 }
 
 // ---------- ONLAYN TEST (bot bilan bir xil: PDF savollar + javob kiritish) ----------
@@ -1607,6 +3489,64 @@ class OnlineTest {
         answers: _s(j['answers']),
         submittedAt: _s(j['submittedAt']),
       );
+
+  /// `OnlineTest.fromJson(x.toJson())` — qiymatni saqlaydigan aylanma (offline kesh uchun).
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'id': id,
+        'groupId': groupId,
+        'groupName': groupName,
+        'name': name,
+        'date': date,
+        'questionCount': questionCount,
+        'optionCount': optionCount,
+        'startAt': startAt,
+        'endAt': endAt,
+        'pdfUrl': pdfUrl,
+        'pdfName': pdfName,
+        'state': state,
+        'score': score,
+        'answers': answers,
+        'submittedAt': submittedAt,
+      };
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is OnlineTest &&
+          id == other.id &&
+          groupId == other.groupId &&
+          groupName == other.groupName &&
+          name == other.name &&
+          date == other.date &&
+          questionCount == other.questionCount &&
+          optionCount == other.optionCount &&
+          startAt == other.startAt &&
+          endAt == other.endAt &&
+          pdfUrl == other.pdfUrl &&
+          pdfName == other.pdfName &&
+          state == other.state &&
+          score == other.score &&
+          answers == other.answers &&
+          submittedAt == other.submittedAt;
+
+  @override
+  int get hashCode => _hashProps(<Object?>[
+        id,
+        groupId,
+        groupName,
+        name,
+        date,
+        questionCount,
+        optionCount,
+        startAt,
+        endAt,
+        pdfUrl,
+        pdfName,
+        state,
+        score,
+        answers,
+        submittedAt,
+      ]);
 }
 
 /// Onlayn test tafsiloti — qator ma'lumoti + o'rin va (vaqt tugagach) javob kaliti.
@@ -1631,6 +3571,32 @@ class OnlineTestDetail {
         rank: _i(j['rank']),
         participants: _i(j['participants']),
       );
+
+  /// Server YASSI tuzilma qaytaradi (`OnlineTest.fromJson(j)` ayni map'dan
+  /// o'qiydi) — shuning uchun ichki test maydonlari yoyib yoziladi.
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        ...test.toJson(),
+        'answerKey': answerKey,
+        'rank': rank,
+        'participants': participants,
+      };
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is OnlineTestDetail &&
+          test == other.test &&
+          answerKey == other.answerKey &&
+          rank == other.rank &&
+          participants == other.participants;
+
+  @override
+  int get hashCode => _hashProps(<Object?>[
+        test,
+        answerKey,
+        rank,
+        participants,
+      ]);
 }
 
 // ---------- AI tekshiruv (Speaking / Writing) — web: types/index.ts `AiCheck*` ----------
@@ -1664,6 +3630,40 @@ class AiCheckScores {
         pronunciation: _d(j['pronunciation']),
         fluency: _d(j['fluency']),
       );
+
+  /// `AiCheckScores.fromJson(x.toJson())` — qiymatni saqlaydigan aylanma (offline kesh uchun).
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'grammar': grammar,
+        'vocabulary': vocabulary,
+        'coherence': coherence,
+        'task': task,
+        'mechanics': mechanics,
+        'pronunciation': pronunciation,
+        'fluency': fluency,
+      };
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is AiCheckScores &&
+          grammar == other.grammar &&
+          vocabulary == other.vocabulary &&
+          coherence == other.coherence &&
+          task == other.task &&
+          mechanics == other.mechanics &&
+          pronunciation == other.pronunciation &&
+          fluency == other.fluency;
+
+  @override
+  int get hashCode => _hashProps(<Object?>[
+        grammar,
+        vocabulary,
+        coherence,
+        task,
+        mechanics,
+        pronunciation,
+        fluency,
+      ]);
 }
 
 /// Bitta tuzatish: asl → taklif + izoh.
@@ -1679,6 +3679,28 @@ class AiCorrection {
         suggestion: _s(j['suggestion']),
         explanation: _s(j['explanation']),
       );
+
+  /// `AiCorrection.fromJson(x.toJson())` — qiymatni saqlaydigan aylanma (offline kesh uchun).
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'original': original,
+        'suggestion': suggestion,
+        'explanation': explanation,
+      };
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is AiCorrection &&
+          original == other.original &&
+          suggestion == other.suggestion &&
+          explanation == other.explanation;
+
+  @override
+  int get hashCode => _hashProps(<Object?>[
+        original,
+        suggestion,
+        explanation,
+      ]);
 }
 
 /// So'z boyligi tavsiyasi.
@@ -1694,6 +3716,28 @@ class AiVocab {
         suggestion: _s(j['suggestion']),
         note: _s(j['note']),
       );
+
+  /// `AiVocab.fromJson(x.toJson())` — qiymatni saqlaydigan aylanma (offline kesh uchun).
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'word': word,
+        'suggestion': suggestion,
+        'note': note,
+      };
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is AiVocab &&
+          word == other.word &&
+          suggestion == other.suggestion &&
+          note == other.note;
+
+  @override
+  int get hashCode => _hashProps(<Object?>[
+        word,
+        suggestion,
+        note,
+      ]);
 }
 
 /// IELTS Writing band bahosi (0-9).
@@ -1722,6 +3766,37 @@ class AiCheckIelts {
         overall: _d(j['overall']),
         taskType: _s(j['taskType']),
       );
+
+  /// `AiCheckIelts.fromJson(x.toJson())` — qiymatni saqlaydigan aylanma (offline kesh uchun).
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'task': task,
+        'coherence': coherence,
+        'lexical': lexical,
+        'grammar': grammar,
+        'overall': overall,
+        'taskType': taskType,
+      };
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is AiCheckIelts &&
+          task == other.task &&
+          coherence == other.coherence &&
+          lexical == other.lexical &&
+          grammar == other.grammar &&
+          overall == other.overall &&
+          taskType == other.taskType;
+
+  @override
+  int get hashCode => _hashProps(<Object?>[
+        task,
+        coherence,
+        lexical,
+        grammar,
+        overall,
+        taskType,
+      ]);
 }
 
 /// Gemini matn tahlili.
@@ -1765,6 +3840,52 @@ class AiCheckAnalysis {
         recommendations: _strList(j['recommendations']),
         ielts: j['ielts'] == null ? null : AiCheckIelts.fromJson(_map(j['ielts'])),
       );
+
+  /// `AiCheckAnalysis.fromJson(x.toJson())` — qiymatni saqlaydigan aylanma (offline kesh uchun).
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'overall': overall,
+        'level': level,
+        'scores': scores.toJson(),
+        'summary': summary,
+        'strengths': strengths,
+        'weaknesses': weaknesses,
+        'corrections': corrections.map((e) => e.toJson()).toList(),
+        'vocabulary': vocabulary.map((e) => e.toJson()).toList(),
+        'improved': improved,
+        'recommendations': recommendations,
+        'ielts': ielts?.toJson(),
+      };
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is AiCheckAnalysis &&
+          overall == other.overall &&
+          level == other.level &&
+          scores == other.scores &&
+          summary == other.summary &&
+          _deepEq(strengths, other.strengths) &&
+          _deepEq(weaknesses, other.weaknesses) &&
+          _deepEq(corrections, other.corrections) &&
+          _deepEq(vocabulary, other.vocabulary) &&
+          improved == other.improved &&
+          _deepEq(recommendations, other.recommendations) &&
+          ielts == other.ielts;
+
+  @override
+  int get hashCode => _hashProps(<Object?>[
+        overall,
+        level,
+        scores,
+        summary,
+        strengths,
+        weaknesses,
+        corrections,
+        vocabulary,
+        improved,
+        recommendations,
+        ielts,
+      ]);
 }
 
 /// Azure talaffuz natijasi (AI tekshiruv yozuvi ichida).
@@ -1796,6 +3917,40 @@ class AiCheckSpeech {
         prosody: _d(j['prosody']),
         words: _list(j['words'], SpeakingWord.fromJson),
       );
+
+  /// `AiCheckSpeech.fromJson(x.toJson())` — qiymatni saqlaydigan aylanma (offline kesh uchun).
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'recognizedText': recognizedText,
+        'pronScore': pronScore,
+        'accuracy': accuracy,
+        'fluency': fluency,
+        'completeness': completeness,
+        'prosody': prosody,
+        'words': words.map((e) => e.toJson()).toList(),
+      };
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is AiCheckSpeech &&
+          recognizedText == other.recognizedText &&
+          pronScore == other.pronScore &&
+          accuracy == other.accuracy &&
+          fluency == other.fluency &&
+          completeness == other.completeness &&
+          prosody == other.prosody &&
+          _deepEq(words, other.words);
+
+  @override
+  int get hashCode => _hashProps(<Object?>[
+        recognizedText,
+        pronScore,
+        accuracy,
+        fluency,
+        completeness,
+        prosody,
+        words,
+      ]);
 }
 
 /// To'liq AI tekshiruv yozuvi. type: 'speaking' | 'writing'.
@@ -1842,6 +3997,55 @@ class AiCheck {
         speech: j['speech'] == null ? null : AiCheckSpeech.fromJson(_map(j['speech'])),
         taskType: _s(j['taskType']),
       );
+
+  /// `AiCheck.fromJson(x.toJson())` — qiymatni saqlaydigan aylanma (offline kesh uchun).
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'id': id,
+        'type': type,
+        'prompt': prompt,
+        'inputText': inputText,
+        'recognizedText': recognizedText,
+        'audioUrl': audioUrl,
+        'score': score,
+        'date': date,
+        'createdAt': createdAt,
+        'analysis': analysis?.toJson(),
+        'speech': speech?.toJson(),
+        'taskType': taskType,
+      };
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is AiCheck &&
+          id == other.id &&
+          type == other.type &&
+          prompt == other.prompt &&
+          inputText == other.inputText &&
+          recognizedText == other.recognizedText &&
+          audioUrl == other.audioUrl &&
+          score == other.score &&
+          date == other.date &&
+          createdAt == other.createdAt &&
+          analysis == other.analysis &&
+          speech == other.speech &&
+          taskType == other.taskType;
+
+  @override
+  int get hashCode => _hashProps(<Object?>[
+        id,
+        type,
+        prompt,
+        inputText,
+        recognizedText,
+        audioUrl,
+        score,
+        date,
+        createdAt,
+        analysis,
+        speech,
+        taskType,
+      ]);
 }
 
 /// AI tekshiruv tarixidagi qator.
@@ -1873,6 +4077,40 @@ class AiCheckListItem {
         createdAt: _s(j['createdAt']),
         hasAudio: _b(j['hasAudio']),
       );
+
+  /// `AiCheckListItem.fromJson(x.toJson())` — qiymatni saqlaydigan aylanma (offline kesh uchun).
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'id': id,
+        'type': type,
+        'prompt': prompt,
+        'score': score,
+        'date': date,
+        'createdAt': createdAt,
+        'hasAudio': hasAudio,
+      };
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is AiCheckListItem &&
+          id == other.id &&
+          type == other.type &&
+          prompt == other.prompt &&
+          score == other.score &&
+          date == other.date &&
+          createdAt == other.createdAt &&
+          hasAudio == other.hasAudio;
+
+  @override
+  int get hashCode => _hashProps(<Object?>[
+        id,
+        type,
+        prompt,
+        score,
+        date,
+        createdAt,
+        hasAudio,
+      ]);
 }
 
 /// AI tekshiruv holati: bo'lim ochiqmi + kalitlar tayyorligi + limit/premium/blok.
@@ -1913,6 +4151,43 @@ class AiCheckStatus {
         // "yopiq" bo'lib qolardi. Server yangi bo'lsa `false` ni aniq yuboradi.
         enabled: j['enabled'] == null ? true : _b(j['enabled']),
       );
+
+  /// `AiCheckStatus.fromJson(x.toJson())` — qiymatni saqlaydigan aylanma (offline kesh uchun).
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'geminiReady': geminiReady,
+        'azureReady': azureReady,
+        'premium': premium,
+        'blocked': blocked,
+        'limit': limit,
+        'usedToday': usedToday,
+        'remaining': remaining,
+        'enabled': enabled,
+      };
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is AiCheckStatus &&
+          geminiReady == other.geminiReady &&
+          azureReady == other.azureReady &&
+          premium == other.premium &&
+          blocked == other.blocked &&
+          limit == other.limit &&
+          usedToday == other.usedToday &&
+          remaining == other.remaining &&
+          enabled == other.enabled;
+
+  @override
+  int get hashCode => _hashProps(<Object?>[
+        geminiReady,
+        azureReady,
+        premium,
+        blocked,
+        limit,
+        usedToday,
+        remaining,
+        enabled,
+      ]);
 }
 
 // ---------- Dars topshirig'i urinishi (natija saqlanishi) — web: `AttemptPayload` ----------
@@ -1943,6 +4218,37 @@ class AttemptAnswer {
         'ok': ok,
         'sec': sec,
       };
+
+  /// `toJson` bilan simmetrik — keshdan/serverdan qayta o'qish uchun.
+  factory AttemptAnswer.fromJson(Map<String, dynamic> j) => AttemptAnswer(
+        index: _i(j['index']),
+        prompt: _s(j['prompt']),
+        answer: _s(j['answer']),
+        expected: _s(j['expected']),
+        ok: _b(j['ok']),
+        sec: _i(j['sec']),
+      );
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is AttemptAnswer &&
+          index == other.index &&
+          prompt == other.prompt &&
+          answer == other.answer &&
+          expected == other.expected &&
+          ok == other.ok &&
+          sec == other.sec;
+
+  @override
+  int get hashCode => _hashProps(<Object?>[
+        index,
+        prompt,
+        answer,
+        expected,
+        ok,
+        sec,
+      ]);
 }
 
 /// Support (yordam darsi) bo'sh sloti. Web: `StudentSupportTeacher['openSlots'][number]`.
@@ -1965,6 +4271,31 @@ class StudentSupportSlot {
         startTime: _s(j['startTime']),
         endTime: _s(j['endTime']),
       );
+
+  /// `StudentSupportSlot.fromJson(x.toJson())` — qiymatni saqlaydigan aylanma (offline kesh uchun).
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'id': id,
+        'date': date,
+        'startTime': startTime,
+        'endTime': endTime,
+      };
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is StudentSupportSlot &&
+          id == other.id &&
+          date == other.date &&
+          startTime == other.startTime &&
+          endTime == other.endTime;
+
+  @override
+  int get hashCode => _hashProps(<Object?>[
+        id,
+        date,
+        startTime,
+        endTime,
+      ]);
 }
 
 /// Support o'qituvchi + bo'sh slotlari. Web: `StudentSupportTeacher`.
@@ -1990,6 +4321,34 @@ class StudentSupportTeacher {
         subject: _s(j['subject']),
         openSlots: _list(j['openSlots'], StudentSupportSlot.fromJson),
       );
+
+  /// `StudentSupportTeacher.fromJson(x.toJson())` — qiymatni saqlaydigan aylanma (offline kesh uchun).
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'teacherId': teacherId,
+        'fullName': fullName,
+        'photoUrl': photoUrl,
+        'subject': subject,
+        'openSlots': openSlots.map((e) => e.toJson()).toList(),
+      };
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is StudentSupportTeacher &&
+          teacherId == other.teacherId &&
+          fullName == other.fullName &&
+          photoUrl == other.photoUrl &&
+          subject == other.subject &&
+          _deepEq(openSlots, other.openSlots);
+
+  @override
+  int get hashCode => _hashProps(<Object?>[
+        teacherId,
+        fullName,
+        photoUrl,
+        subject,
+        openSlots,
+      ]);
 }
 
 /// O'quvchining support broni. Web: `StudentSupportBooking`.
@@ -2027,6 +4386,46 @@ class StudentSupportBooking {
         topic: _s(j['topic']),
         notes: _s(j['notes']),
       );
+
+  /// `StudentSupportBooking.fromJson(x.toJson())` — qiymatni saqlaydigan aylanma (offline kesh uchun).
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'id': id,
+        'teacherId': teacherId,
+        'teacherName': teacherName,
+        'date': date,
+        'startTime': startTime,
+        'endTime': endTime,
+        'status': status,
+        'topic': topic,
+        'notes': notes,
+      };
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is StudentSupportBooking &&
+          id == other.id &&
+          teacherId == other.teacherId &&
+          teacherName == other.teacherName &&
+          date == other.date &&
+          startTime == other.startTime &&
+          endTime == other.endTime &&
+          status == other.status &&
+          topic == other.topic &&
+          notes == other.notes;
+
+  @override
+  int get hashCode => _hashProps(<Object?>[
+        id,
+        teacherId,
+        teacherName,
+        date,
+        startTime,
+        endTime,
+        status,
+        topic,
+        notes,
+      ]);
 }
 
 /// Support ekrani ma'lumoti: bo'sh slotli o'qituvchilar + mening bronlarim. Web: `StudentSupport`.
@@ -2040,6 +4439,25 @@ class StudentSupport {
         supports: _list(j['supports'], StudentSupportTeacher.fromJson),
         myBookings: _list(j['myBookings'], StudentSupportBooking.fromJson),
       );
+
+  /// `StudentSupport.fromJson(x.toJson())` — qiymatni saqlaydigan aylanma (offline kesh uchun).
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'supports': supports.map((e) => e.toJson()).toList(),
+        'myBookings': myBookings.map((e) => e.toJson()).toList(),
+      };
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is StudentSupport &&
+          _deepEq(supports, other.supports) &&
+          _deepEq(myBookings, other.myBookings);
+
+  @override
+  int get hashCode => _hashProps(<Object?>[
+        supports,
+        myBookings,
+      ]);
 }
 
 // ---------- Shartnoma (elektron nusxa) — web: `ContractDoc` ----------
@@ -2093,4 +4511,56 @@ class ContractDoc {
         status: _s(j['status']),
         visible: _b(j['visible']),
       );
+
+  /// `ContractDoc.fromJson(x.toJson())` — qiymatni saqlaydigan aylanma (offline kesh uchun).
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'id': id,
+        'number': number,
+        'title': title,
+        'target': target,
+        'recipientKey': recipientKey,
+        'recipientName': recipientName,
+        'templateName': templateName,
+        'date': date,
+        'pdfUrl': pdfUrl,
+        'docxUrl': docxUrl,
+        'delivered': delivered,
+        'status': status,
+        'visible': visible,
+      };
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ContractDoc &&
+          id == other.id &&
+          number == other.number &&
+          title == other.title &&
+          target == other.target &&
+          recipientKey == other.recipientKey &&
+          recipientName == other.recipientName &&
+          templateName == other.templateName &&
+          date == other.date &&
+          pdfUrl == other.pdfUrl &&
+          docxUrl == other.docxUrl &&
+          delivered == other.delivered &&
+          status == other.status &&
+          visible == other.visible;
+
+  @override
+  int get hashCode => _hashProps(<Object?>[
+        id,
+        number,
+        title,
+        target,
+        recipientKey,
+        recipientName,
+        templateName,
+        date,
+        pdfUrl,
+        docxUrl,
+        delivered,
+        status,
+        visible,
+      ]);
 }

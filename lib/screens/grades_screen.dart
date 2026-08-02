@@ -2,9 +2,13 @@ import 'package:flutter/material.dart';
 import '../widgets/sub_scaffold.dart';
 import '../widgets/ui.dart';
 import '../theme/app_theme.dart';
+import '../utils/errors.dart';
 import '../utils/format.dart';
 import '../api/student_api.dart';
 import '../models/models.dart';
+// `QuarterBar` va `fetchCurrentQuarter()` — «Davomat» ekrani bilan umumiy
+// (ikkala ekran ham chorak bo'yicha ishlaydi).
+import 'attendance_screen.dart' show QuarterBar, fetchCurrentQuarter;
 
 class GradesScreen extends StatefulWidget {
   const GradesScreen({super.key});
@@ -16,6 +20,11 @@ class _GradesScreenState extends State<GradesScreen> {
   StudentGradesReport? _report;
   String? _error;
 
+  /// Ko'rsatilayotgan chorak — `null` hali aniqlanmagan (meta yuklanmoqda).
+  /// Hisobot BARCHA choraklarni qaytaradi, shuning uchun chorak o'zgarganda
+  /// qayta so'rov kerak emas.
+  int? _quarter;
+
   @override
   void initState() {
     super.initState();
@@ -25,12 +34,23 @@ class _GradesScreenState extends State<GradesScreen> {
   Future<void> _load() async {
     setState(() => _error = null);
     try {
-      final r = await StudentApi.grades();
+      // Chorak QATTIQ KODLANMAYDI — joriy chorak serverdan (`/student/meta`) olinadi,
+      // aks holda 2-chorakda barcha baholar 0.00 ko'rinardi.
+      // Ikkalasi PARALLEL — meta so'rovi hisobotni kutib turmasin.
+      final gradesFuture = StudentApi.grades();
+      final quarterFuture =
+          _quarter != null ? Future<int>.value(_quarter!) : fetchCurrentQuarter();
+      final r = await gradesFuture;
+      final q = await quarterFuture;
       if (!mounted) return;
-      setState(() => _report = r);
+      setState(() {
+        _report = r;
+        _quarter = q;
+      });
     } catch (e) {
       if (!mounted) return;
-      setState(() => _error = e.toString());
+      // Xom istisno matni emas — o'zbekcha tushunarli xabar.
+      setState(() => _error = humanError(e, "Baholarni yuklab bo'lmadi"));
     }
   }
 
@@ -40,17 +60,30 @@ class _GradesScreenState extends State<GradesScreen> {
   }
 
   Widget _body(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (_quarter != null && _error == null)
+          QuarterBar(value: _quarter!, onChanged: (q) => setState(() => _quarter = q)),
+        Expanded(child: _content(context)),
+      ],
+    );
+  }
+
+  Widget _content(BuildContext context) {
     if (_error != null) {
       return Center(child: EmptyState(icon: Icons.error_outline, text: "Yuklab bo'lmadi.\n$_error"));
     }
     final report = _report;
     if (report == null) return const Loader();
 
+    // Baho kalitlari — chorak raqami (satr ko'rinishida).
+    final q = '${_quarter ?? 1}';
     final subjects = report.subjects;
     final currentGrades = <String, double?>{};
     final vals = <double>[];
     for (final s in subjects) {
-      final g = report.grades[s.id]?['1'];
+      final g = report.grades[s.id]?[q];
       currentGrades[s.id] = g;
       if (g != null) vals.add(g);
     }

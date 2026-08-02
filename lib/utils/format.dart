@@ -19,7 +19,12 @@ Color gradeColor(num g) {
     Color(0xFF10B981), Color(0xFF059669), Color(0xFF047857),
     Color(0xFF065F46), Color(0xFF064E3B),
   ];
-  final i = (g.toDouble().round() - 1).clamp(0, 4);
+  // NaN/Infinity: `.round()` UnsupportedError tashlaydi — server null/0÷0 yuborsa
+  // butun ekran qulamasligi uchun chekli bo'lmagan qiymatni chetga suramiz.
+  final d = g.toDouble();
+  if (d.isNaN) return steps[0];
+  if (d.isInfinite) return d > 0 ? steps[4] : steps[0];
+  final i = (d.round() - 1).clamp(0, 4);
   return steps[i];
 }
 
@@ -43,12 +48,16 @@ Color subjectColor(String key) {
 String initials(String name) {
   final parts = name.trim().split(RegExp(r'\s+')).where((s) => s.isNotEmpty).toList();
   if (parts.isEmpty) return '?';
-  return parts.take(2).map((w) => w[0]).join().toUpperCase();
+  // `w[0]` — UTF-16 code unit: emoji/surrogat juftlikni ikkiga bo'lib yuboradi
+  // (ekranda "" ko'rinadi), shuning uchun to'liq belgi (`runes.first`) olinadi.
+  return parts.take(2).map((w) => String.fromCharCode(w.runes.first)).join().toUpperCase();
 }
 
 /// Pulni "850 000" ko'rinishida (manfiy uchun "−").
 String fmtMoney(num n, {bool withSign = false}) {
   final val = n.toDouble();
+  // NaN/Infinity da `.round()` UnsupportedError tashlaydi — balans ekrani qulamasin.
+  if (!val.isFinite) return '0';
   final abs = val.abs().round();
   final s = abs.toString();
   final buf = StringBuffer();
@@ -56,14 +65,32 @@ String fmtMoney(num n, {bool withSign = false}) {
     if (i > 0 && (s.length - i) % 3 == 0) buf.write(' ');
     buf.write(s[i]);
   }
-  final sign = val < 0 ? '−' : (withSign && val > 0 ? '+' : '');
+  // Belgi YAXLITLANGAN qiymatga qarab: -0.4 → "0" (ilgari "−0" chiqardi).
+  final sign = abs == 0 ? '' : (val < 0 ? '−' : (withSign ? '+' : ''));
   return '$sign$buf';
 }
+
+/// Faqat sana ("2026-03-12") shaklidagi kirishning boshidagi yil-oy-kun.
+final _ymdRe = RegExp(r'^(\d{4})-(\d{2})-(\d{2})');
 
 DateTime? _parse(String? iso) {
   if (iso == null || iso.trim().isEmpty) return null;
   final s = iso.trim();
-  return DateTime.tryParse(s.length <= 10 ? '${s}T00:00:00' : s);
+  final d = DateTime.tryParse(s.length <= 10 ? '${s}T00:00:00' : s);
+  if (d == null) return null;
+  // DateTime.parse toshib ketgan qiymatlarni jimgina "tuzatadi"
+  // ("2026-02-30" → 2-mart, "2026-13-45" → 2027-yil) — foydalanuvchiga
+  // MUTLAQO boshqa sana ko'rsatilmasligi uchun asl matn bilan solishtiramiz.
+  final m = _ymdRe.firstMatch(s);
+  if (m != null) {
+    final y = int.parse(m.group(1)!);
+    final mo = int.parse(m.group(2)!);
+    final dd = int.parse(m.group(3)!);
+    final chk = DateTime.utc(y, mo, dd);
+    if (chk.year != y || chk.month != mo || chk.day != dd) return null;
+  }
+  // UTC ("...Z") vaqt mahalliy vaqtga o'girilmasa soat noto'g'ri ko'rinadi.
+  return d.toLocal();
 }
 
 /// "12 Mart" yoki weekday=true bo'lsa "12 Mart, Dushanba".
@@ -80,11 +107,17 @@ String fmtDate(String? iso, {bool weekday = false}) {
 String fmtMonth(String? ym) {
   if (ym == null || ym.length < 7) return ym ?? '';
   final m = int.tryParse(ym.substring(5, 7)) ?? 0;
-  return '${m >= 1 && m <= 12 ? _months[m - 1] : ym} ${ym.substring(0, 4)}';
+  // Oy yaroqsiz bo'lsa xom qiymatni qaytaramiz: ilgari "2026-13" → "2026-13 2026"
+  // kabi chalkash matn chiqardi.
+  if (m < 1 || m > 12) return ym;
+  return '${_months[m - 1]} ${ym.substring(0, 4)}';
 }
 
 /// "HH:mm".
 String fmtTime(String? iso) {
+  // Faqat sana kelgan bo'lsa vaqt umuman yo'q — "00:00" ko'rsatish chalg'itadi
+  // (jadvalda soati noma'lum dars yarim tunda bo'lib ko'rinardi).
+  if ((iso?.trim().length ?? 0) <= 10) return '';
   final d = _parse(iso);
   if (d == null) return '';
   return '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
@@ -93,6 +126,68 @@ String fmtTime(String? iso) {
 List<String> get monthsUz => _months;
 List<String> get weekdaysUz => _weekdays;
 List<String> get weekdaysShortUz => _weekdaysShort;
+
+/// Dashboard sarlavhasi uchun — kichik harfli oy va yakshanbadan boshlanuvchi
+/// hafta kunlari (`DateTime.weekday % 7` indeksiga mos).
+const _wdUz = ['Yakshanba', 'Dushanba', 'Seshanba', 'Chorshanba', 'Payshanba', 'Juma', 'Shanba'];
+const _moUz = [
+  'yanvar', 'fevral', 'mart', 'aprel', 'may', 'iyun',
+  'iyul', 'avgust', 'sentabr', 'oktabr', 'noyabr', 'dekabr',
+];
+
+/// Web `todayLine()` — "1-avgust, Shanba".
+/// [now] — testlar uchun; berilmasa joriy vaqt olinadi.
+String todayLine({DateTime? now}) {
+  final d = now ?? DateTime.now();
+  return '${d.day}-${_moUz[d.month - 1]}, ${_wdUz[d.weekday % 7]}';
+}
+
+/// "2026-01" → "Yan '26" (web `monthShort`).
+String monthShort(String m) {
+  if (m.length < 7) return m;
+  final n = int.tryParse(m.substring(5, 7)) ?? 0;
+  // Oy yaroqsiz bo'lsa (masalan "2026-13") xom qiymatni qaytaramiz — ilgari
+  // qiymatning o'zi "oy nomi" o'rniga qo'yilib, "202 '26" kabi axlat chiqardi.
+  if (n < 1 || n > 12) return m;
+  final name = _months[n - 1];
+  return "${name.length > 3 ? name.substring(0, 3) : name} '${m.substring(2, 4)}";
+}
+
+/// Map qiymatlari yig'indisi (web `sumVals`).
+double sumValues(Map<String, double> o) => o.values.fold(0.0, (a, b) => a + b);
+
+/// Ikki ISO vaqt bir XIL kunga tegishlimi (mahalliy vaqt bo'yicha).
+/// Mahalliy vaqt muhim: aks holda kechqurungi xabarlar qo'shni kunga tushib qoladi.
+bool sameDay(String? a, String? b) {
+  final x = DateTime.tryParse(a ?? '')?.toLocal();
+  final y = DateTime.tryParse(b ?? '')?.toLocal();
+  if (x == null || y == null) return x == null && y == null;
+  return x.year == y.year && x.month == y.month && x.day == y.day;
+}
+
+/// Chatdagi kunlik sana ajratgichi — "Bugun" / "Kecha" / "12 Iyul"
+/// (o'tgan yil bo'lsa "12 Iyul, 2025"). Sana o'qilmasa bo'sh satr.
+/// [now] — testlar uchun; berilmasa joriy vaqt olinadi.
+String dayDividerLabel(String iso, {DateTime? now}) {
+  final d = DateTime.tryParse(iso)?.toLocal();
+  if (d == null) return '';
+  final nowLocal = now ?? DateTime.now();
+  final today = DateTime(nowLocal.year, nowLocal.month, nowLocal.day);
+  final day = DateTime(d.year, d.month, d.day);
+  final diff = today.difference(day).inDays;
+  if (diff == 0) return 'Bugun';
+  if (diff == 1) return 'Kecha';
+  final base = fmtDate(iso);
+  return d.year == nowLocal.year ? base : '$base, ${d.year}';
+}
+
+/// Medal rangi (1/2/3-o'rin), aks holda null.
+Color? medalColor(int rank) {
+  if (rank == 1) return const Color(0xFFF5B301);
+  if (rank == 2) return const Color(0xFF9AA3B2);
+  if (rank == 3) return const Color(0xFFCD7F32);
+  return null;
+}
 
 /// Guruh dars kunlari (0=Dushanba…6=Yakshanba) → "Du, Chor, Ju".
 /// Noto'g'ri indekslar e'tiborsiz qoldiriladi.

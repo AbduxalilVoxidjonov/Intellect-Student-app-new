@@ -5,6 +5,7 @@ import '../../api/student_api.dart';
 import '../../models/models.dart';
 import '../../services/session.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/errors.dart';
 import '../../utils/format.dart';
 import '../../widgets/ui.dart';
 
@@ -16,7 +17,7 @@ class ChatScreen extends StatefulWidget {
   State<ChatScreen> createState() => _ChatScreenState();
 }
 
-class _ChatScreenState extends State<ChatScreen> {
+class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   final _scroll = ScrollController();
   final _text = TextEditingController();
   List<StudentChatMessage> _messages = [];
@@ -24,15 +25,55 @@ class _ChatScreenState extends State<ChatScreen> {
   String? _error;
   Timer? _poll;
 
+  /// So'rov allaqachon ketyaptimi — sekin tarmoqda so'rovlar to'planib qolmasin.
+  bool _fetching = false;
+
+  /// Tab ko'rinib turibdimi (`TickerMode` — shell.dart IndexedStack beradi).
+  bool _visible = true;
+
+  /// Ilova old planda (foreground) turibdimi.
+  bool _foreground = true;
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _foreground = (WidgetsBinding.instance.lifecycleState ?? AppLifecycleState.resumed) ==
+        AppLifecycleState.resumed;
     _load();
-    _poll = Timer.periodic(const Duration(seconds: 4), (_) => _fetchNew());
+    // Timer `didChangeDependencies` da yoqiladi (TickerMode holatiga qarab).
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Boshqa tabga o'tilganda `TickerMode` o'chadi va bu qayta chaqiriladi.
+    _visible = TickerMode.valuesOf(context).enabled;
+    _syncPoll();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Ilova fonga o'tganda 4 sekundlik so'rov batareya va trafikni yeydi.
+    _foreground = state == AppLifecycleState.resumed;
+    _syncPoll();
+  }
+
+  /// Davriy so'rovni FAQAT tab ko'rinib turganda va ilova old planda bo'lganda
+  /// ishlatadi — aks holda to'xtatadi.
+  void _syncPoll() {
+    final want = _visible && _foreground;
+    if (want && _poll == null) {
+      _poll = Timer.periodic(const Duration(seconds: 4), (_) => _fetchNew());
+    } else if (!want && _poll != null) {
+      _poll!.cancel();
+      _poll = null;
+    }
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _poll?.cancel();
     _scroll.dispose();
     _text.dispose();
@@ -51,21 +92,32 @@ class _ChatScreenState extends State<ChatScreen> {
       if (!mounted) return;
       setState(() {
         _messages = msgs;
+        _error = null; // avvalgi xato yozuvi qolib ketmasin
         _loading = false;
       });
       _scrollToBottom();
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = e.toString();
+        // Xom `DioException`/`Exception` matni emas — o'zbekcha tushunarli xabar.
+        _error = humanError(e, "Xabarlarni yuklab bo'lmadi");
         _loading = false;
       });
     }
   }
 
   Future<void> _fetchNew() async {
-    if (_messages.isEmpty) return;
+    if (_fetching) return;
+    _fetching = true;
     try {
+      // Ro'yxat BO'SH bo'lsa `since` yo'q — to'liq ro'yxat so'raladi.
+      // Ilgari bu yerda `if (_messages.isEmpty) return;` turardi: yangi o'quvchi
+      // bo'sh chatni ochsa, o'qituvchi yozgan xabarni ilova qayta ochilmaguncha
+      // KO'RMAS edi.
+      if (_messages.isEmpty) {
+        await _load();
+        return;
+      }
       final since = _messages.last.createdAt;
       final fresh = await StudentApi.chat(since: since);
       if (!mounted || fresh.isEmpty) return;
@@ -77,6 +129,8 @@ class _ChatScreenState extends State<ChatScreen> {
       }
     } catch (_) {
       // jim — keyingi urinishda qayta
+    } finally {
+      _fetching = false;
     }
   }
 
@@ -92,7 +146,9 @@ class _ChatScreenState extends State<ChatScreen> {
     } catch (e) {
       if (!mounted) return;
       _text.text = t;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Yuborilmadi: $e')));
+      // Xom istisno matni emas — o'zbekcha xabar.
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Yuborilmadi: ${humanError(e)}')));
     }
   }
 
@@ -129,7 +185,7 @@ class _ChatScreenState extends State<ChatScreen> {
                             final m = _messages[i];
                             // Kunlik SANA ajratgichi: xabarning kuni avvalgisidan farq qilsa
                             // (yoki bu birinchi xabar bo'lsa) tepasida "Bugun / Kecha / 12 Iyul".
-                            final showDate = i == 0 || !_sameDay(_messages[i - 1].createdAt, m.createdAt);
+                            final showDate = i == 0 || !sameDay(_messages[i - 1].createdAt, m.createdAt);
                             // Yangi kun boshlansa yuboruvchi qayta ko'rsatiladi (avatar + nom).
                             final prevSame =
                                 i > 0 && !showDate && _messages[i - 1].senderUserId == m.senderUserId;
@@ -212,33 +268,11 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 }
 
-/// Ikki ISO vaqt bir XIL kunga tegishlimi (mahalliy vaqt bo'yicha).
-/// Mahalliy vaqt muhim: aks holda kechqurungi xabarlar qo'shni kunga tushib qoladi.
-bool _sameDay(String? a, String? b) {
-  final x = DateTime.tryParse(a ?? '')?.toLocal();
-  final y = DateTime.tryParse(b ?? '')?.toLocal();
-  if (x == null || y == null) return x == null && y == null;
-  return x.year == y.year && x.month == y.month && x.day == y.day;
-}
-
 /// Chatdagi kunlik sana ajratgichi — "Bugun" / "Kecha" / "12 Iyul"
-/// (o'tgan yil bo'lsa "12 Iyul, 2025").
+/// (o'tgan yil bo'lsa "12 Iyul, 2025"). Matn mantiqi: `dayDividerLabel`.
 class _DateDivider extends StatelessWidget {
   final String iso;
   const _DateDivider({required this.iso});
-
-  String _label() {
-    final d = DateTime.tryParse(iso)?.toLocal();
-    if (d == null) return '';
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final day = DateTime(d.year, d.month, d.day);
-    final diff = today.difference(day).inDays;
-    if (diff == 0) return 'Bugun';
-    if (diff == 1) return 'Kecha';
-    final base = fmtDate(iso);
-    return d.year == now.year ? base : '$base, ${d.year}';
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -254,7 +288,7 @@ class _DateDivider extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               decoration: BoxDecoration(color: c.surface2, borderRadius: BorderRadius.circular(10)),
               child: Text(
-                _label(),
+                dayDividerLabel(iso),
                 style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: c.muted),
               ),
             ),

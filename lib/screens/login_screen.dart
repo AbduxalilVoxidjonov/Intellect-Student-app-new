@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../config.dart';
 import '../services/session.dart';
 import '../theme/app_theme.dart';
+import '../utils/errors.dart';
 import '../widgets/ui.dart';
 
 /// Kirish ekrani — o'quvchi login (email/telefon) + parol.
@@ -28,16 +29,29 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Future<void> _submit() async {
     if (_loading) return;
+    // Mijoz tomonda validatsiya: bo'sh maydonlar bilan tarmoqqa chiqishning
+    // ma'nosi yo'q (server baribir 400 qaytaradi), javobni esa kutish kerak.
+    if (_email.text.trim().isEmpty || _password.text.isEmpty) {
+      setState(() => _error = "Login va parolni to'ldiring");
+      return;
+    }
     setState(() {
       _loading = true;
       _error = null;
     });
-    final err = await context.read<Session>().login(_email.text, _password.text);
-    if (!mounted) return;
-    setState(() {
-      _loading = false;
-      _error = err;
-    });
+    try {
+      final err = await context.read<Session>().login(_email.text, _password.text);
+      if (!mounted) return;
+      setState(() => _error = err);
+    } catch (e) {
+      // Kutilmagan xato (Error ham) — ekran o'lik qolmasin, sabab ko'rsatilsin.
+      if (!mounted) return;
+      setState(() => _error = humanError(e));
+    } finally {
+      // `finally` SHART: xato tashlansa `_loading` `true` bo'lib qolar va
+      // `if (_loading) return;` tufayli "Kirish" tugmasi butunlay o'lik bo'lardi.
+      if (mounted) setState(() => _loading = false);
+    }
   }
 
   @override

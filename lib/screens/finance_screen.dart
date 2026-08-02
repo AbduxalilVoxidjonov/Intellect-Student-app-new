@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../widgets/sub_scaffold.dart';
 import '../widgets/ui.dart';
 import '../theme/app_theme.dart';
+import '../utils/errors.dart';
 import '../utils/format.dart';
 import '../api/student_api.dart';
 import '../models/models.dart';
@@ -30,7 +31,7 @@ class _FinanceScreenState extends State<FinanceScreen> {
       if (mounted) setState(() => _data = d);
     } catch (e) {
       if (mounted) {
-        setState(() => _error = e.toString().replaceFirst(RegExp(r'^Exception:\s*'), ''));
+        setState(() => _error = humanError(e, "To'lovlarni yuklab bo'lmadi"));
       }
     }
   }
@@ -205,8 +206,12 @@ class _FinanceScreenState extends State<FinanceScreen> {
                       ],
                     ),
                   ),
-                  Text('−${fmtMoney(data.totalDiscount)} so\'m',
-                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: Color(0xFF7C3AED))),
+                  // `Flexible` — uzun summa yoki katta textScale da `Row` toshmasin.
+                  Flexible(
+                    child: Text('−${fmtMoney(data.totalDiscount)} so\'m',
+                        textAlign: TextAlign.end,
+                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: Color(0xFF7C3AED))),
+                  ),
                 ],
               ),
             ),

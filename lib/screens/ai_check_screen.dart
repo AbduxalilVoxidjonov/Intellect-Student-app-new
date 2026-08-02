@@ -4,6 +4,8 @@ import '../api/student_api.dart';
 import '../config.dart';
 import '../models/models.dart';
 import '../theme/app_theme.dart';
+import '../utils/diff.dart';
+import '../utils/errors.dart';
 import '../utils/format.dart';
 import '../widgets/sub_scaffold.dart';
 import '../widgets/ui.dart';
@@ -28,6 +30,10 @@ class _AiCheckScreenState extends State<AiCheckScreen> {
   bool _busy = false;
   String? _err;
 
+  /// Ekranni umuman yuklab bo'lmadi (holat ham, tarix ham kelmadi) —
+  /// bu TARMOQ xatosi, "hali tekshiruv yo'q" bo'sh holati EMAS.
+  String? _loadErr;
+
   // Writing
   final _wPrompt = TextEditingController();
   final _wText = TextEditingController();
@@ -51,22 +57,28 @@ class _AiCheckScreenState extends State<AiCheckScreen> {
   }
 
   Future<void> _reload() async {
+    String? statusErr;
+    String? historyErr;
     try {
       final s = await StudentApi.aiCheckStatus();
       if (mounted) setState(() => _status = s);
-    } catch (_) {
-      // Holat kelmasa ham ekran ishlaydi.
+    } catch (e) {
+      // Holat kelmasa ham (tarix kelgan bo'lsa) ekran ishlaydi.
+      statusErr = humanError(e);
     }
     try {
       final h = await StudentApi.aiCheckHistory();
       if (mounted) setState(() => _history = h);
-    } catch (_) {
-      // Tarix bo'sh qoladi.
+    } catch (e) {
+      historyErr = humanError(e);
     }
+    if (!mounted) return;
+    // FAQAT ikkalasi ham kelmaganda xato holati ko'rsatiladi.
+    setState(() => _loadErr = (statusErr != null && historyErr != null) ? statusErr : null);
   }
 
-  /// "Exception: " prefiksisiz xato matni (web `errMsg`).
-  String _errMsg(Object e) => e.toString().replaceFirst('Exception: ', '');
+  /// Foydalanuvchiga ko'rsatiladigan xato matni (xom istisno emas).
+  String _errMsg(Object e) => humanError(e);
 
   Future<void> _openItem(String id) async {
     setState(() => _err = null);
@@ -120,6 +132,14 @@ class _AiCheckScreenState extends State<AiCheckScreen> {
     // Markaz bo'limni ilovada ochmagan (admin: Ilova → AI check → "Ilovada ochish").
     // Holat kelmagan bo'lsa (so'rov muvaffaqiyatsiz) YOPIQ deb ko'rsatMAYMIZ.
     final closed = st != null && !st.enabled;
+
+    // Hech narsa yuklanmadi — bo'sh holat o'rniga xato + "Qayta urinish".
+    if (_loadErr != null) {
+      return SubScaffold(
+        title: 'AI tekshiruv',
+        child: Center(child: _ErrorView(message: _loadErr!, onRetry: _reload)),
+      );
+    }
 
     return SubScaffold(
       title: 'AI tekshiruv',
@@ -341,6 +361,48 @@ class _AiCheckScreenState extends State<AiCheckScreen> {
             Text('${h.score.round()}', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Yuklash xatosi ko'rinishi — barcha ekranlarda BIR XIL naqsh:
+/// "Yuklab bo'lmadi" + sabab + "Qayta urinish".
+class _ErrorView extends StatelessWidget {
+  final String message;
+  final VoidCallback onRetry;
+  const _ErrorView({required this.message, required this.onRetry});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = AppTheme.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 64,
+            height: 64,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(color: c.surface3, borderRadius: BorderRadius.circular(20)),
+            child: Icon(Icons.warning_amber_rounded, size: 30, color: c.faint),
+          ),
+          const SizedBox(height: 10),
+          Text("Yuklab bo'lmadi",
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: c.text)),
+          const SizedBox(height: 6),
+          Text(message,
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 13.5, color: c.muted, height: 1.5)),
+          const SizedBox(height: 16),
+          SizedBox(
+            width: 190,
+            child: SButton('Qayta urinish',
+                icon: Icons.refresh_rounded, kind: BtnKind.soft, onTap: onRetry),
+          ),
+        ],
       ),
     );
   }
@@ -956,52 +1018,8 @@ class AiCheckResultScreen extends StatelessWidget {
   /* ---- Asl matn → yaxshilangan matn farqi (so'z darajasidagi LCS) ----
      Yaxshilangan tomonda QO'SHILGAN/O'ZGARTIRILGAN so'zlar sariq rangda ajratiladi. */
 
-  static final RegExp _tokenRe = RegExp(r'\s+|[^\s]+');
-  static final RegExp _wsRe = RegExp(r'^\s+$');
-  static final RegExp _edgeRe = RegExp(r'^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$', unicode: true);
-
-  static List<String> _tokenize(String s) => _tokenRe.allMatches(s).map((m) => m[0]!).toList();
-
-  /// Solishtirish uchun normallashtirish: kichik harf + chetdagi tinish belgilarini olib tashlash.
-  static String _normTok(String t) {
-    if (_wsRe.hasMatch(t)) return ' ';
-    return t.toLowerCase().replaceAll(_edgeRe, '');
-  }
-
+  /// Farq MANTIG'I `lib/utils/diff.dart` da (`diffImproved`) — bu yerda faqat stil.
   static List<InlineSpan> _improvedSpans(String original, String improved) {
-    final o = _tokenize(original);
-    final m = _tokenize(improved);
-    final no = o.map(_normTok).toList();
-    final nm = m.map(_normTok).toList();
-    final n = o.length;
-    final k = m.length;
-
-    // LCS DP (orqaga) — bo'sh normli tokenlar mos kelmaydi.
-    final dp = List.generate(n + 1, (_) => List<int>.filled(k + 1, 0));
-    for (int i = n - 1; i >= 0; i--) {
-      for (int j = k - 1; j >= 0; j--) {
-        dp[i][j] = (no[i] == nm[j] && no[i] != '' && no[i] != ' ')
-            ? dp[i + 1][j + 1] + 1
-            : (dp[i + 1][j] > dp[i][j + 1] ? dp[i + 1][j] : dp[i][j + 1]);
-      }
-    }
-
-    // Backtrack — yaxshilangan tomonda qaysi tokenlar o'zgarmagan.
-    final matched = List<bool>.filled(k, false);
-    int i = 0;
-    int j = 0;
-    while (i < n && j < k) {
-      if (no[i] == nm[j] && no[i] != '' && no[i] != ' ') {
-        matched[j] = true;
-        i++;
-        j++;
-      } else if (dp[i + 1][j] >= dp[i][j + 1]) {
-        i++;
-      } else {
-        j++;
-      }
-    }
-
     const base = TextStyle(fontSize: 14, height: 1.7);
     const mark = TextStyle(
       fontSize: 14,
@@ -1010,12 +1028,9 @@ class AiCheckResultScreen extends StatelessWidget {
       color: Color(0xFF92400E),
       backgroundColor: Color(0xFFFDE68A),
     );
-    final spans = <InlineSpan>[];
-    for (int idx = 0; idx < m.length; idx++) {
-      final tok = m[idx];
-      final plain = _wsRe.hasMatch(tok) || _normTok(tok) == '' || matched[idx];
-      spans.add(TextSpan(text: tok, style: plain ? base : mark));
-    }
-    return spans;
+    return [
+      for (final tok in diffImproved(original, improved))
+        TextSpan(text: tok.text, style: tok.changed ? mark : base),
+    ];
   }
 }

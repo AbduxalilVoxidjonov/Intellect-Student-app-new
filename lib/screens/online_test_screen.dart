@@ -4,6 +4,8 @@ import '../api/student_api.dart';
 import '../config.dart';
 import '../models/models.dart';
 import '../theme/app_theme.dart';
+import '../utils/answers.dart';
+import '../utils/errors.dart';
 import '../utils/format.dart';
 import '../widgets/sub_scaffold.dart';
 import '../widgets/ui.dart';
@@ -56,32 +58,12 @@ class _OnlineTestScreenState extends State<OnlineTestScreen> {
         _error = null;
         _picked
           ..clear()
-          ..addAll(_decode(d.test.answers, d.test.optionCount));
+          ..addAll(decodeAnswers(d.test.answers, d.test.optionCount, d.test.questionCount));
       });
     } catch (e) {
       if (!mounted) return;
-      setState(() => _error = e.toString().replaceFirst(RegExp(r'^Exception:\s*'), ''));
+      setState(() => _error = humanError(e, "Testni yuklab bo'lmadi"));
     }
-  }
-
-  /// "AB-D" → {0:0, 1:1, 3:3} ('-' — javobsiz).
-  static Map<int, int> _decode(String answers, int optionCount) {
-    final m = <int, int>{};
-    for (var i = 0; i < answers.length; i++) {
-      final idx = answers.codeUnitAt(i) - 65; // 'A'
-      if (idx >= 0 && idx < optionCount) m[i] = idx;
-    }
-    return m;
-  }
-
-  /// Tanlovlardan serverga yuboriladigan qator ("ABCDA…", javobsiz — '-').
-  String _encode(int questionCount) {
-    final sb = StringBuffer();
-    for (var i = 0; i < questionCount; i++) {
-      final v = _picked[i];
-      sb.write(v == null ? '-' : String.fromCharCode(65 + v));
-    }
-    return sb.toString();
   }
 
   Future<void> _openPdf(String url) async {
@@ -105,39 +87,24 @@ class _OnlineTestScreenState extends State<OnlineTestScreen> {
       ..showSnackBar(SnackBar(content: Text(msg)));
   }
 
-  /// "abcda" yoki "1a 2b 3c" ko'rinishidagi matnni tanlovlarga o'giradi (botdagi 2-usul).
+  /// "Tez kiritish" maydonidagi matnni tanlovlarga qo'llaydi.
+  /// Matn tahlili — `parseQuickAnswers` (lib/utils/answers.dart).
   void _applyQuick(int questionCount, int optionCount) {
-    final raw = _quickCtrl.text.toUpperCase();
-    final maxLetter = 65 + optionCount - 1;
-    final letters = <int>[];
-    for (final code in raw.codeUnits) {
-      // Kirill harflari ham qabul qilinadi (botdagi bilan bir xil).
-      final ch = switch (String.fromCharCode(code)) {
-        'А' => 'A',
-        'В' => 'B',
-        'С' => 'C',
-        'Д' => 'D',
-        'Е' => 'E',
-        'Ф' => 'F',
-        final s => s,
-      }.codeUnitAt(0);
-      if (ch >= 65 && ch <= maxLetter) letters.add(ch - 65);
-    }
-    if (letters.isEmpty) {
-      _toast('Javoblarni "abcda" ko\'rinishida yozing');
+    final picks = parseQuickAnswers(_quickCtrl.text, questionCount, optionCount);
+
+    if (picks.isEmpty) {
+      _toast('Javoblarni "abcda" yoki "1a 2b" ko\'rinishida yozing');
       return;
     }
     setState(() {
-      for (var i = 0; i < letters.length && i < questionCount; i++) {
-        _picked[i] = letters[i];
-      }
+      _picked.addAll(picks);
       _quickOpen = false;
       _quickCtrl.clear();
     });
   }
 
   Future<void> _submit(OnlineTest t) async {
-    final answers = _encode(t.questionCount);
+    final answers = encodeAnswers(_picked, t.questionCount);
     final empty = answers.split('').where((c) => c == '-').length;
     final ok = await showDialog<bool>(
       context: context,
@@ -177,7 +144,7 @@ class _OnlineTestScreenState extends State<OnlineTestScreen> {
       setState(() => _data = d);
       _toast('Javoblaringiz qabul qilindi');
     } catch (e) {
-      _toast(e.toString().replaceFirst(RegExp(r'^Exception:\s*'), ''));
+      _toast(humanError(e, "Javoblarni yuborib bo'lmadi"));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -303,7 +270,12 @@ class _OnlineTestScreenState extends State<OnlineTestScreen> {
             children: [
               Icon(Icons.help_outline_rounded, size: 15, color: c.faint),
               const SizedBox(width: 6),
-              Text('${t.questionCount} savol · A–${String.fromCharCode(64 + t.optionCount)}',
+              // optionCount noto'g'ri (0) kelsa "A–@" chiqib qolmasin — harflar oralig'i
+              // faqat kamida bitta variant bo'lganda ko'rsatiladi.
+              Text(
+                  t.optionCount < 1
+                      ? '${t.questionCount} savol'
+                      : '${t.questionCount} savol · A–${String.fromCharCode(64 + t.optionCount)}',
                   style: TextStyle(fontSize: 12.5, color: c.muted)),
               const SizedBox(width: 14),
               Icon(Icons.schedule_rounded, size: 15, color: c.faint),
@@ -383,14 +355,14 @@ class _OnlineTestScreenState extends State<OnlineTestScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text('Barcha javoblarni ketma-ket yozing',
+          Text('Ketma-ket ("abcda") yoki savol raqami bilan ("1a 2b") yozing',
               style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: c.muted)),
           const SizedBox(height: 8),
           TextField(
             controller: _quickCtrl,
             textCapitalization: TextCapitalization.characters,
             decoration: InputDecoration(
-              hintText: 'masalan: abcda…',
+              hintText: 'masalan: abcda yoki 1a 2b',
               filled: true,
               fillColor: c.surface2,
               contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
@@ -426,7 +398,7 @@ class _OnlineTestScreenState extends State<OnlineTestScreen> {
   /// Javob varaqasi: har savol uchun A/B/C/… tugmalari.
   /// [key] berilsa (test tugagach) to'g'ri javob yashil, xato qizil ko'rsatiladi.
   Widget _answerSheet(AppColors c, OnlineTest t, {required bool editable, String key = ''}) {
-    final picked = editable ? _picked : _decode(t.answers, t.optionCount);
+    final picked = editable ? _picked : decodeAnswers(t.answers, t.optionCount, t.questionCount);
     return SCard(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
       child: Column(

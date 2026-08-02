@@ -4,9 +4,11 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../widgets/sub_scaffold.dart';
 import '../widgets/ui.dart';
 import '../theme/app_theme.dart';
+import '../utils/errors.dart';
 import '../utils/format.dart';
 import '../api/student_api.dart';
 import '../models/models.dart';
@@ -39,7 +41,7 @@ class _CertificatesScreenState extends State<CertificatesScreen> {
       if (mounted) setState(() => _certs = d);
     } catch (e) {
       if (mounted) {
-        setState(() => _error = e.toString().replaceFirst(RegExp(r'^Exception:\s*'), ''));
+        setState(() => _error = humanError(e, "Sertifikatlarni yuklab bo'lmadi"));
       }
     }
   }
@@ -55,22 +57,39 @@ class _CertificatesScreenState extends State<CertificatesScreen> {
       if (bytes.isEmpty) throw Exception("Fayl bo'sh");
       final path = await _saveFile(cert, bytes);
       if (!mounted) return;
+      // Fayl ilovaning SHAXSIY papkasiga tushadi (Downloads'da emas) — shuning uchun
+      // xom yo'l ko'rsatilmaydi, o'rniga tizim ko'ruvchisida ochish taklif qilinadi.
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text('Saqlandi: $path')));
+        ..showSnackBar(SnackBar(
+          content: const Text('Ilova papkasiga saqlandi'),
+          duration: const Duration(seconds: 6),
+          action: SnackBarAction(label: 'Ochish', onPressed: () => _openFile(path)),
+        ));
     } catch (e) {
       if (!mounted) return;
-      final msg = e.toString().replaceFirst(RegExp(r'^Exception:\s*'), '').trim();
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(msg.isEmpty ? "Yuklab bo'lmadi" : msg)));
+        ..showSnackBar(SnackBar(content: Text(humanError(e, "Yuklab bo'lmadi"))));
     } finally {
       if (mounted) setState(() => _busyId = null);
     }
   }
 
-  /// Faylni foydalanuvchi topa oladigan papkaga yozadi:
-  /// Android — ilovaning tashqi papkasi (fayl menejerida ko'rinadi), aks holda hujjatlar papkasi.
+  /// Saqlangan faylni tizim ko'ruvchisida ochadi (`share_plus` yo'q — `url_launcher`).
+  Future<void> _openFile(String path) async {
+    try {
+      if (await launchUrl(Uri.file(path), mode: LaunchMode.externalApplication)) return;
+    } catch (_) {}
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(const SnackBar(content: Text("Faylni ochib bo'lmadi")));
+  }
+
+  /// Faylni diskka yozadi. DIQQAT: bu ilovaning O'Z papkasi (Android'da
+  /// `Android/data/<paket>/files`, iOS'da hujjatlar) — Downloads EMAS. Shu sabab
+  /// foydalanuvchiga yo'l ko'rsatilmaydi, faylni "Ochish" tugmasi orqali ochadi.
   Future<String> _saveFile(StudentCertificateDto cert, List<int> bytes) async {
     Directory? dir;
     if (!kIsWeb && Platform.isAndroid) {
@@ -180,15 +199,18 @@ class _CertificatesScreenState extends State<CertificatesScreen> {
                     children: [
                       const Icon(Icons.workspace_premium, color: Colors.white, size: 32),
                       const SizedBox(width: 14),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('${certs.length}',
-                              style: const TextStyle(
-                                  color: Colors.white, fontSize: 22, fontWeight: FontWeight.w800, letterSpacing: -0.3)),
-                          Text('ta sertifikat ($activeCount ta amal qiluvchi)',
-                              style: const TextStyle(color: Colors.white, fontSize: 13)),
-                        ],
+                      // `Expanded` — uzun matn/katta textScale da `Row` toshib ketmasin.
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('${certs.length}',
+                                style: const TextStyle(
+                                    color: Colors.white, fontSize: 22, fontWeight: FontWeight.w800, letterSpacing: -0.3)),
+                            Text('ta sertifikat ($activeCount ta amal qiluvchi)',
+                                style: const TextStyle(color: Colors.white, fontSize: 13)),
+                          ],
+                        ),
                       ),
                     ],
                   ),
