@@ -9,6 +9,16 @@
 # packages, and plugins designed to encourage good coding practices.
 include: package:flutter_lints/flutter.yaml
 
+# Generatsiya qilingan va begona kod tahlil qilinmasin. `build/ios/SourcePackages/`
+# ichiga iOS qurilishi paytida paketlarning (masalan firebase_messaging) O'Z manba
+# kodi va testlari ko'chiriladi — ular `mockito` kabi bizda yo'q paketlarni talab
+# qiladi va IDE'da o'nlab soxta "xato" bo'lib ko'rinadi. Loyiha kodiga aloqasi yo'q.
+analyzer:
+  exclude:
+    - build/**
+    - "**/*.g.dart"
+    - "**/*.freezed.dart"
+
 linter:
   # The lint rules applied to this project can be customized in the
   # section below to disable rules from the `package:flutter_lints/flutter.yaml`
