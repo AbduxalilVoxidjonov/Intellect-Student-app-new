@@ -62,7 +62,7 @@ void main() {
       expect(ApiClient.token, 'jwt-saved');
     });
 
-    test('buzilgan JSON `user` — xato YUTILADI, ilova qulamaydi', () async {
+    test('buzilgan JSON `user` — xato YUTILADI, lekin sessiya TOZALANADI', () async {
       SharedPreferences.setMockInitialValues(<String, Object>{
         'token': 'jwt-saved',
         'user': '{buzilgan json',
@@ -72,12 +72,54 @@ void main() {
       await expectLater(s.init(), completes);
 
       expect(s.ready, isTrue);
-      // Token bor, lekin user yo'q — foydalanuvchi "ismsiz" holda ichkarida qoladi.
-      expect(s.isAuthed, isTrue);
+      // FAIL-CLOSED: rolni o'qib bo'lmadi → ichkariga kiritmaymiz.
+      expect(s.isAuthed, isFalse);
       expect(s.user, isNull);
       expect(s.fullName, '');
       expect(s.userId, isNull);
-      expect(s.role, 'student', reason: 'default `student`');
+      expect(ApiClient.token, isNull);
+      final p = await SharedPreferences.getInstance();
+      expect(p.getString('token'), isNull, reason: 'diskdan ham o\'chiriladi');
+    });
+
+    test('saqlangan rol `teacher` — sessiya tozalanadi (fail-closed)', () async {
+      SharedPreferences.setMockInitialValues(<String, Object>{
+        'token': 'jwt-saved',
+        'user': jsonEncode({'id': 't1', 'fullName': 'O\'qituvchi', 'role': 'teacher'}),
+      });
+
+      final s = Session();
+      await s.init();
+
+      expect(s.isAuthed, isFalse);
+      expect(s.user, isNull);
+      expect(ApiClient.token, isNull);
+      final p = await SharedPreferences.getInstance();
+      expect(p.getString('token'), isNull);
+      expect(p.getString('user'), isNull);
+    });
+
+    test('token bor, `user` umuman yo\'q — sessiya tozalanadi', () async {
+      SharedPreferences.setMockInitialValues(<String, Object>{'token': 'jwt-saved'});
+
+      final s = Session();
+      await s.init();
+
+      expect(s.isAuthed, isFalse);
+      expect(ApiClient.token, isNull);
+    });
+
+    test('saqlangan rol `STUDENT` (katta harf) — sessiya saqlanadi', () async {
+      SharedPreferences.setMockInitialValues(<String, Object>{
+        'token': 'jwt-saved',
+        'user': jsonEncode({'id': 'u1', 'fullName': 'Ali', 'role': ' STUDENT '}),
+      });
+
+      final s = Session();
+      await s.init();
+
+      expect(s.isAuthed, isTrue);
+      expect(s.role, 'student');
     });
 
     test('`user` JSON massiv — cast xatosi ham yutiladi', () async {
@@ -144,12 +186,66 @@ void main() {
       expect(s.role, 'parent');
     });
 
-    test('rolsiz user ham kiritiladi (role == null → tekshiruv o\'tkaziladi)', () async {
+    // FAIL-CLOSED: backend `role` ni HAR DOIM yuboradi, kelmasa — kutilmagan holat.
+    test('rolsiz user — RAD ETILADI', () async {
       install(FakeAdapter.always(FakeReply.json(_loginOk(user: {'id': 'x', 'fullName': 'X'}))));
       final s = Session();
 
+      expect(await s.login('a@b.c', 'x'), "Bu ilova faqat o'quvchilar uchun");
+      expect(s.isAuthed, isFalse);
+      expect(ApiClient.token, isNull);
+    });
+
+    test('`role` aniq null — RAD ETILADI', () async {
+      install(FakeAdapter.always(
+        FakeReply.json(_loginOk(user: {'id': 'x', 'fullName': 'X', 'role': null})),
+      ));
+      final s = Session();
+
+      expect(await s.login('a@b.c', 'x'), "Bu ilova faqat o'quvchilar uchun");
+      expect(s.isAuthed, isFalse);
+    });
+
+    // Ilgari `role is String` sharti false bo'lib butun tekshiruv CHETLAB
+    // O'TILARDI va foydalanuvchi kirib ketardi.
+    test('`role` String emas (42) — RAD ETILADI', () async {
+      install(FakeAdapter.always(
+        FakeReply.json(_loginOk(user: {'id': 'x', 'fullName': 'X', 'role': 42})),
+      ));
+      final s = Session();
+
+      expect(await s.login('a@b.c', 'x'), "Bu ilova faqat o'quvchilar uchun");
+      expect(s.isAuthed, isFalse);
+      expect(ApiClient.token, isNull);
+    });
+
+    test('`role` bo\'sh satr — RAD ETILADI', () async {
+      install(FakeAdapter.always(
+        FakeReply.json(_loginOk(user: {'id': 'x', 'fullName': 'X', 'role': '   '})),
+      ));
+
+      expect(await Session().login('a@b.c', 'x'), "Bu ilova faqat o'quvchilar uchun");
+    });
+
+    test('`role` katta harfda (`STUDENT`) — QABUL qilinadi', () async {
+      install(FakeAdapter.always(
+        FakeReply.json(_loginOk(user: {'id': 'u1', 'fullName': 'Ali', 'role': ' STUDENT '})),
+      ));
+      final s = Session();
+
       expect(await s.login('a@b.c', 'x'), isNull);
-      expect(s.role, 'student', reason: 'default');
+      expect(s.isAuthed, isTrue);
+      expect(s.role, 'student', reason: 'getter ham normallashtiradi');
+    });
+
+    test('`role` `Parent` — QABUL qilinadi va getter `parent` qaytaradi', () async {
+      install(FakeAdapter.always(
+        FakeReply.json(_loginOk(user: {'id': 'p1', 'fullName': 'Ota', 'role': 'Parent'})),
+      ));
+      final s = Session();
+
+      expect(await s.login('a@b.c', 'x'), isNull);
+      expect(s.role, 'parent');
     });
 
     test('noto\'g\'ri parol (401) — serverning matni qaytadi, sessiya ochilmaydi', () async {
@@ -256,14 +352,16 @@ void main() {
       expect(await Session().login('a@b.c', 'x'), "Server javobi noto'g'ri");
     });
 
-    test('`user` maydoni String — e\'tiborsiz qoldiriladi, sessiya token bilan ochiladi', () async {
+    // Ilgari bunday javob sessiyani ochardi. Endi rolni tasdiqlab bo'lmagani
+    // uchun RAD etiladi (fail-closed) — lekin xato TASHLANMAYDI.
+    test('`user` maydoni String — sessiya OCHILMAYDI, xato tashlanmaydi', () async {
       install(FakeAdapter.always(const FakeReply.json('{"token":"t","user":"ali"}')));
 
       final s = Session();
-      expect(await s.login('a@b.c', 'x'), isNull);
-      expect(s.isAuthed, isTrue);
+      expect(await s.login('a@b.c', 'x'), "Bu ilova faqat o'quvchilar uchun");
+      expect(s.isAuthed, isFalse);
       expect(s.user, isNull);
-      expect(s.role, 'student', reason: 'default');
+      expect(ApiClient.token, isNull);
     });
 
     test('`token` bo\'sh satr — "Server javobi noto\'g\'ri"', () async {
@@ -275,9 +373,10 @@ void main() {
 
   // -------------------------------------------------------------------------
   group('_persist — eski `user` qolib ketishi', () {
-    // TUZATILDI: `user` kelmasa disk yozuvi O'CHIRILADI, aks holda yangi token
-    // eski foydalanuvchining ismi/id'si bilan birga tiklanardi.
-    test('user siz login — eski foydalanuvchi diskdan O\'CHIRILADI', () async {
+    // FAIL-CLOSED dan keyin `user` siz javob umuman qabul qilinmaydi, ya'ni
+    // "yangi token + eski ism" holati YUZAGA KELMAYDI: eski sessiya o'zgarishsiz
+    // qoladi, yangi token esa saqlanmaydi.
+    test('user siz login — RAD etiladi, eski sessiya buzilmaydi', () async {
       SharedPreferences.setMockInitialValues(<String, Object>{
         'token': 'eski-token',
         'user': jsonEncode({'id': 'old', 'fullName': 'Eski Foydalanuvchi', 'role': 'student'}),
@@ -290,19 +389,34 @@ void main() {
 
       final err = await s.login('yangi@mail.uz', 'x');
 
-      expect(err, isNull);
-      expect(s.token, 'yangi-token');
-      expect(s.fullName, '', reason: 'xotirada tozalandi');
+      expect(err, "Bu ilova faqat o'quvchilar uchun");
+      expect(s.token, 'eski-token', reason: 'yangi token saqlanmaydi');
 
       final p = await SharedPreferences.getInstance();
-      expect(p.getString('user'), isNull, reason: 'eski user o\'chirilishi shart');
+      expect(p.getString('token'), 'eski-token');
+    });
 
-      // Ilova qayta ishga tushsa — faqat YANGI token tiklanadi, begona ism yo'q.
+    // Yangi foydalanuvchi kirsa — diskdagi yozuv TO'LIQ almashadi.
+    test('boshqa o\'quvchi login qildi — diskdagi user almashadi', () async {
+      SharedPreferences.setMockInitialValues(<String, Object>{
+        'token': 'eski-token',
+        'user': jsonEncode({'id': 'old', 'fullName': 'Eski Foydalanuvchi', 'role': 'student'}),
+      });
+      install(FakeAdapter.always(FakeReply.json(
+        _loginOk(user: {'id': 'new', 'fullName': 'Yangi O\'quvchi', 'role': 'student'}),
+      )));
+
+      final s = Session();
+      await s.init();
+
+      expect(await s.login('yangi@mail.uz', 'x'), isNull);
+      expect(s.userId, 'new');
+      expect(s.fullName, 'Yangi O\'quvchi');
+
       final s2 = Session();
       await s2.init();
-      expect(s2.token, 'yangi-token');
-      expect(s2.fullName, '');
-      expect(s2.userId, isNull);
+      expect(s2.token, 'jwt-1');
+      expect(s2.userId, 'new');
     });
   });
 
@@ -339,7 +453,10 @@ void main() {
     });
 
     test('`_loggingOut` qorovuli — parallel chaqiruv ikkinchi marta ishlamaydi', () async {
-      SharedPreferences.setMockInitialValues(<String, Object>{'token': 'jwt'});
+      SharedPreferences.setMockInitialValues(<String, Object>{
+        'token': 'jwt',
+        'user': jsonEncode(_studentUser),
+      });
       final s = Session();
       await s.init();
       var n = 0;
@@ -384,7 +501,10 @@ void main() {
     // `ApiClient` darajasidagi dedublikatsiya + `_loggingOut` future keshi:
     // nechta 401 kelishidan qat'i nazar sessiya BIR MARTA tugatiladi.
     test('parallel 401 lar — natija bitta logout', () async {
-      SharedPreferences.setMockInitialValues(<String, Object>{'token': 'jwt'});
+      SharedPreferences.setMockInitialValues(<String, Object>{
+        'token': 'jwt',
+        'user': jsonEncode(_studentUser),
+      });
       final s = Session();
       await s.init();
       var n = 0;

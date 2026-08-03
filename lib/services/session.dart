@@ -37,8 +37,27 @@ class Session extends ChangeNotifier {
   /// BERILMAYDI — server o'quvchini tokenning o'zidan aniqlaydi.
   String? get userId => _str('id');
 
-  /// Rol: `student` | `parent`.
-  String get role => _str('role') ?? 'student';
+  /// Rol: `student` | `parent`. Qiymat NORMALLASHTIRILADI va faqat shu ikkitadan
+  /// biri qaytadi. Default `student` saqlab qolindi, chunki u hech qanday RUXSAT
+  /// bermaydi — ilovaga kirish huquqi login/init dagi fail-closed tekshiruvida
+  /// hal qilinadi, bu getter esa faqat UI ni tanlaydi (dashboard `!= 'parent'`).
+  /// Normalizatsiya kerak: `PARENT` kabi qiymat login tekshiruvidan o'tadi,
+  /// lekin xom holda `!= 'parent'` bo'lib ota-onaga o'quvchi ekrani ochilardi.
+  String get role {
+    final r = _user?['role']?.toString().trim().toLowerCase();
+    return r == 'parent' ? 'parent' : 'student';
+  }
+
+  /// Rol shu ilovaga mos keladimi — FAIL-CLOSED.
+  /// Backend `role` ni HAR DOIM yuboradi (`UserDto.Role` non-nullable, DB'da
+  /// NOT NULL) va u kichik harfda: `student`/`teacher`/`admin`/`superadmin`/
+  /// `staff`. Shuning uchun rol umuman kelmasa, `null` bo'lsa yoki String
+  /// bo'lmasa — bu KUTILMAGAN holat va biz KIRITMAYMIZ.
+  /// (`parent` backendda hozircha yo'q, kelajakka zaxira sifatida qoldirilgan.)
+  static bool _roleAllowed(Object? raw) {
+    final role = raw?.toString().trim().toLowerCase();
+    return role == 'student' || role == 'parent';
+  }
 
   Future<void> init() async {
     final p = await SharedPreferences.getInstance();
@@ -48,6 +67,17 @@ class Session extends ChangeNotifier {
       try {
         _user = jsonDecode(u) as Map<String, dynamic>;
       } catch (_) {}
+    }
+    // Saqlangan sessiyani ham tekshiramiz: rol mos kelmasa (yoki `user` yozuvi
+    // buzilgan bo'lib rolni umuman o'qib bo'lmasa) sessiyani TOZALAYMIZ.
+    // Aks holda login'dagi qat'iy tekshiruvni disk orqali chetlab o'tish mumkin
+    // bo'lardi. `logout()` chaqirilmaydi — u PushService/Firebase ga tegadi,
+    // ishga tushish paytida esa bu keraksiz; shunchaki holatni tozalaymiz.
+    if (_token != null && !_roleAllowed(_user?['role'])) {
+      _token = null;
+      _user = null;
+      await p.remove(_kToken);
+      await p.remove(_kUser);
     }
     _dark = p.getString(_kTheme) == 'dark';
     ApiClient.token = _token;
@@ -72,13 +102,14 @@ class Session extends ChangeNotifier {
       if (data is! Map) return 'Server javobi noto\'g\'ri';
       final token = data['token'];
       if (token is! String || token.isEmpty) return 'Server javobi noto\'g\'ri';
-      // `user` kutilmagan turda kelsa (String, List) — shunchaki e'tiborsiz qoldiramiz,
-      // token bor ekan sessiya ochilaveradi (ism keyin `/student/me` dan keladi).
+      // `user` kutilmagan turda kelsa (String, List) — `null` bo'ladi va quyidagi
+      // rol tekshiruvi sessiyani OCHMAYDI (fail-closed).
       final raw = data['user'];
       final user = raw is Map ? raw.cast<String, dynamic>() : null;
-      // Faqat o'quvchi rolini bu ilovaga kiritamiz.
-      final role = user?['role'];
-      if (role is String && role != 'student' && role != 'parent') {
+      // Faqat o'quvchi (va zaxira sifatida ota-ona) rolini bu ilovaga kiritamiz.
+      // Backend rolni kafolatlaydi, shuning uchun rol kelmasa yoki mos kelmasa —
+      // KIRITMAYMIZ (fail-closed).
+      if (!_roleAllowed(user?['role'])) {
         return 'Bu ilova faqat o\'quvchilar uchun';
       }
       await _persist(token, user);
