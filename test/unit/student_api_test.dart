@@ -11,7 +11,6 @@ const _dashboardJson = '''
   "meta": {"lessonTimes": [], "absenceReasons": [], "currentQuarter": 2, "currentWeek": 5},
   "todayLessons": [],
   "todayGrades": [],
-  "pendingAssignmentsCount": 3,
   "balance": -150000,
   "monthlyFee": 450000
 }
@@ -184,7 +183,6 @@ void main() {
       expect(a.last.path, '/student/dashboard');
       expect(a.last.method, 'GET');
       expect(d.profile.fullName, 'Ali Valiyev');
-      expect(d.pendingAssignmentsCount, 3);
       expect(d.balance, -150000);
       expect(d.monthlyFee, 450000);
       expect(d.meta.currentQuarter, 2);

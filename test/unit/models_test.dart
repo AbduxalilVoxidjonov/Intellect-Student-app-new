@@ -272,7 +272,6 @@ void main() {
       expect(d.meta.lessonTimes, isEmpty);
       expect(d.todayLessons, isEmpty);
       expect(d.todayGrades, isEmpty);
-      expect(d.pendingAssignmentsCount, 0);
       expect(d.balance, 0);
       expect(d.monthlyFee, 0);
     });
@@ -325,7 +324,6 @@ void main() {
             'isLate': false,
           },
         ],
-        'pendingAssignmentsCount': 2,
         'balance': -850000,
         'monthlyFee': 450000.0,
       };
@@ -341,7 +339,6 @@ void main() {
       expect(d.todayGrades.single.homework, '15-mashq');
       expect(d.todayGrades.single.reasonId, isNull);
       expect(d.todayGrades.single.conducted, isTrue);
-      expect(d.pendingAssignmentsCount, 2);
       expect(d.balance, -850000.0);
       expect(d.monthlyFee, 450000.0);
     });
@@ -443,13 +440,6 @@ void main() {
       expect(n.attendance, isNotNull);
       expect(n.attendance.missedDays, isEmpty);
       expect(n.reasons, isEmpty);
-      expect(n.disciplinePoints, isEmpty);
-      expect(n.assignments, isNotNull);
-      expect(n.assignments.items, isEmpty);
-      expect(n.assignments.count, 0);
-      expect(n.evaluationTypes, isEmpty);
-      expect(n.evaluations, isEmpty);
-      expect(n.evaluationsBySubject, isEmpty);
       expect(n.marksTrend, isEmpty);
     });
 
@@ -479,69 +469,6 @@ void main() {
         'reasons': [
           {'reasonId': 'r1', 'name': 'Kasal', 'short': 'K', 'isLate': false, 'count': 2}
         ],
-        'disciplineScore': 88,
-        'disciplinePlus': 10,
-        'disciplineMinus': 22,
-        'disciplinePoints': [
-          {
-            'id': 'dp1',
-            'reasonName': 'Kechikish',
-            'points': -2,
-            'note': 'darsga kech qoldi',
-            'createdAt': '2026-03-10T09:00:00',
-            'source': 'teacher',
-          }
-        ],
-        'assignments': {
-          'count': 5,
-          'gradedCount': 4,
-          'totalScore': 34.5,
-          'totalMax': 50,
-          'items': [
-            {
-              'assignmentId': 'a1',
-              'subjectName': 'Matematika',
-              'title': 'Uy ishi 3',
-              'format': 'test',
-              'maxScore': 10,
-              'score': 8.5,
-              'completed': true,
-            },
-            {
-              'assignmentId': 'a2',
-              'subjectName': 'Fizika',
-              'title': 'Laboratoriya',
-              'format': 'file',
-              'maxScore': 10,
-              'score': null,
-              'completed': false,
-            },
-          ],
-        },
-        'evaluationTypes': [
-          {'id': 'e1', 'name': 'Uy ishi'}
-        ],
-        'evaluations': [
-          {
-            'month': '2026-03',
-            'grades': {'e1': 4.0},
-            'avg': 4.0,
-          }
-        ],
-        'evaluationsBySubject': [
-          {
-            'subjectId': 'sub1',
-            'subjectName': 'Matematika',
-            'avg': 4.5,
-            'evaluations': [
-              {
-                'month': '2026-03',
-                'grades': {'e1': 5},
-                'avg': 5,
-              }
-            ],
-          }
-        ],
         'homeworkDone': 20,
         'homeworkMissed': 3,
         'behaviorGood': 7,
@@ -567,28 +494,9 @@ void main() {
       expect(n.attendancePct, 90.0);
       expect(n.reasons.single.count, 2);
       expect(n.reasons.single.isLate, isFalse);
-      expect(n.disciplineScore, 88.0);
-      expect(n.disciplinePoints.single.points, -2.0);
-      expect(n.assignments.count, 5);
-      expect(n.assignments.gradedCount, 4);
-      expect(n.assignments.items, hasLength(2));
-      expect(n.assignments.items[0].score, 8.5);
-      expect(n.assignments.items[1].score, isNull,
-          reason: 'baholanmagan topshiriq 0 emas, null bo\'lishi kerak');
-      expect(n.assignments.items[1].completed, isFalse);
-      expect(n.evaluationTypes.single.name, 'Uy ishi');
-      expect(n.evaluations.single.avg, 4.0);
-      expect(n.evaluationsBySubject.single.evaluations.single.grades['e1'], 5.0);
       expect(n.homeworkDone, 20);
       expect(n.behaviorBad, 1);
       expect(n.marksTrend.single.month, '2026-03');
-    });
-
-    test('assignments o\'rniga null — bo\'sh obyekt', () {
-      final n = StudentNotebook.fromJson(<String, dynamic>{'assignments': null});
-      expect(n.assignments.count, 0);
-      expect(n.assignments.items, isEmpty);
-      expect(n.assignments.totalMax, 0);
     });
   });
 
@@ -1270,8 +1178,8 @@ void main() {
     });
 
     test('BUG-14: butun son o\'rniga matn kelsa _i TypeError tashlamasligi kerak', () {
-      final d = StudentDashboard.fromJson(<String, dynamic>{'pendingAssignmentsCount': '2'});
-      expect(d.pendingAssignmentsCount, 2);
+      final n = StudentNotebook.fromJson(<String, dynamic>{'conducted': '40'});
+      expect(n.conducted, 40);
     });
 
     test('BUG-15: ixtiyoriy son matn kelsa _dn/_in TypeError tashlamasligi kerak', () {
@@ -1459,7 +1367,6 @@ void main() {
           'isLate': true,
         },
       ],
-      'pendingAssignmentsCount': 3,
       'balance': -850000.0,
       'monthlyFee': 500000.0,
     };
@@ -1507,60 +1414,6 @@ void main() {
       'attendancePct': 92.0,
       'reasons': [
         {'reasonId': 'r1', 'name': 'Kasal', 'short': 'K', 'isLate': false, 'count': 3},
-      ],
-      'disciplineScore': 88.0,
-      'disciplinePlus': 12.0,
-      'disciplineMinus': 24.0,
-      'disciplinePoints': [
-        {
-          'id': 'dp-1',
-          'reasonName': 'Kechikish',
-          'points': -2.0,
-          'note': 'izoh',
-          'createdAt': '2025-01-10',
-          'source': 'teacher',
-        },
-      ],
-      'assignments': <String, dynamic>{
-        'count': 5,
-        'gradedCount': 4,
-        'totalScore': 34.0,
-        'totalMax': 50.0,
-        'items': [
-          {
-            'assignmentId': 'a-1',
-            'subjectName': 'Matematika',
-            'title': 'Uy ishi',
-            'format': 'test',
-            'maxScore': 10.0,
-            'score': 8.0,
-            'completed': true,
-          },
-        ],
-      },
-      'evaluationTypes': [
-        {'id': 'e-1', 'name': 'Nazorat'},
-      ],
-      'evaluations': [
-        {
-          'month': '2025-01',
-          'grades': <String, dynamic>{'e-1': 4.0},
-          'avg': 4.0,
-        },
-      ],
-      'evaluationsBySubject': [
-        {
-          'subjectId': 'sub-1',
-          'subjectName': 'Matematika',
-          'avg': 4.5,
-          'evaluations': [
-            {
-              'month': '2025-01',
-              'grades': <String, dynamic>{'e-1': 4.5},
-              'avg': 4.5,
-            },
-          ],
-        },
       ],
       'homeworkDone': 20,
       'homeworkMissed': 3,
@@ -1972,8 +1825,9 @@ void main() {
 
     test('boshqa turdagi obyekt bilan teng emas (== turni tekshiradi)', () {
       final ref = SubjectRef.fromJson(<String, dynamic>{'id': 'x', 'name': 'y'});
-      final ev = EvaluationType.fromJson(<String, dynamic>{'id': 'x', 'name': 'y'});
-      expect(ref, isNot(equals(ev)));
+      // Bir xil maydonli BOSHQA tur — `==` turni ham tekshirishi kerak.
+      final meta = AbsenceReasonMeta.fromJson(<String, dynamic>{'id': 'x', 'name': 'y'});
+      expect(ref, isNot(equals(meta)));
       // ignore: unrelated_type_equality_checks
       expect(ref == 'SubjectRef', isFalse);
       expect(ref, equals(ref)); // refleksivlik

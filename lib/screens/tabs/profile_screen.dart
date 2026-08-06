@@ -13,7 +13,6 @@ import '../grades_screen.dart';
 import '../attendance_screen.dart';
 import '../grading_screen.dart';
 import '../ai_check_screen.dart';
-import '../discipline_screen.dart';
 import '../finance_screen.dart';
 import '../certificates_screen.dart';
 import '../contracts_screen.dart';
@@ -54,7 +53,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _MenuEntry(Icons.check_circle_rounded, 'Davomat', const Color(0xFF16A34A), (_) => const AttendanceScreen()),
     _MenuEntry(Icons.check_rounded, 'Baholash', const Color(0xFF0D9488), (_) => const GradingScreen()),
     _MenuEntry(Icons.auto_awesome_rounded, 'AI tekshiruv', const Color(0xFF7C3AED), (_) => const AiCheckScreen()),
-    _MenuEntry(Icons.verified_user_rounded, 'Intizomiy ball', const Color(0xFF0EA5E9), (_) => const DisciplineScreen()),
     _MenuEntry(Icons.account_balance_wallet_rounded, "To'lovlar", const Color(0xFF7C3AED),
         (_) => const FinanceScreen()),
     _MenuEntry(Icons.workspace_premium_rounded, 'Sertifikatlar', const Color(0xFFD97706),

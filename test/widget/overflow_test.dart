@@ -23,7 +23,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:student/screens/attendance_screen.dart';
 import 'package:student/screens/certificates_screen.dart';
-import 'package:student/screens/discipline_screen.dart';
 import 'package:student/screens/finance_screen.dart';
 import 'package:student/screens/grades_screen.dart';
 import 'package:student/screens/online_test_screen.dart';
@@ -54,8 +53,6 @@ void main() {
  "conducted":120,"attended":100,"attendancePct":83.3,
  "reasons":[{"reasonId":"r1","name":"Sababsiz qoldirilgan darslar","short":"S","isLate":false,
              "count":15}],
- "disciplineScore":100,"disciplinePlus":25,"disciplineMinus":25,"disciplinePoints":[],
- "assignments":{},"evaluationTypes":[],"evaluations":[],"evaluationsBySubject":[],
  "homeworkDone":100,"homeworkMissed":20,"behaviorGood":10,"behaviorBad":5,"marksTrend":[]}
 ''');
     api.on('/student/grading', '[]');
@@ -75,9 +72,7 @@ void main() {
  "grades":{"sub1":{"2026-01":4.0,"2026-02":5.0}},
  "attendance":{"missedDays":{},"illnessDays":{},"missedLessons":{},"illnessLessons":{},
                "lateCount":{}},
- "conducted":10,"attended":8,"attendancePct":80,"reasons":[],"disciplineScore":90,
- "disciplinePlus":0,"disciplineMinus":10,"disciplinePoints":[],"assignments":{},
- "evaluationTypes":[],"evaluations":[],"evaluationsBySubject":[],"homeworkDone":4,
+ "conducted":10,"attended":8,"attendancePct":80,"reasons":[],"homeworkDone":4,
  "homeworkMissed":1,"behaviorGood":0,"behaviorBad":0,"marksTrend":[]}
 ''');
     api.on('/student/grading', '[]');
@@ -168,21 +163,6 @@ void main() {
     await tester.pumpWidget(wrapRoot(const GradesScreen()));
     await settle(tester);
     expectNoRealErrors(tester, reason: 'GradesScreen textScale 2.0');
-  });
-
-  testWidgets('DisciplineScreen — toshib ketmaydi', (tester) async {
-    useSmallScreen(tester);
-    final api = installFakeApi();
-    api.on('/student/discipline', '''
-{"remaining":72.5,"plus":27.5,"minus":55,
- "items":[{"id":"d1","reasonName":"Darsga kechikib kelgani uchun ogohlantirish",
-           "points":-2.5,"note":"Uchinchi marta","createdAt":"2026-03-01",
-           "createdBy":"","source":"Jurnal"}]}
-''');
-
-    await tester.pumpWidget(wrapRoot(const DisciplineScreen()));
-    await settle(tester);
-    expectNoRealErrors(tester, reason: 'DisciplineScreen 360dp');
   });
 
   testWidgets('TestsScreen — uzun test nomi bilan toshib ketmaydi', (tester) async {

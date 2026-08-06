@@ -13,8 +13,8 @@ import '../models/models.dart';
 Color _violet(AppColors c) => c.isDark ? const Color(0xFFA78BFA) : const Color(0xFF7C3AED);
 
 /// O'quvchi — UMUMIY STATISTIKA (web: `pages/student/Statistics.tsx`).
-/// Baholar trendi, fanlar o'rtachasi, davomat + sabablar, intizom,
-/// topshiriqlar, oylik feedback, uy vazifa va xulq + baholash mezonlari.
+/// Baholar trendi, fanlar o'rtachasi, davomat + sabablar, uy vazifa va xulq
+/// + baholash mezonlari.
 class StatisticsScreen extends StatefulWidget {
   const StatisticsScreen({super.key});
   @override
@@ -165,13 +165,14 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     final lateTotal = sumValues(nb.attendance.lateCount).round();
     final attPct = nb.attendancePct.round();
 
-    // ---- Intizom ----
-    final disc = nb.disciplineScore.round();
-    final discColor = disc >= 85 ? c.green : (disc >= 60 ? c.amber : c.red);
-
-    // ---- Oylik feedback (fan kesimida) ----
-    final feedback = nb.evaluationsBySubject.where((s) => s.avg > 0).toList()
-      ..sort((x, y) => y.avg.compareTo(x.avg));
+    // ---- Xulq (jurnal belgilari) ----
+    // Belgi umuman qo'yilmagan bo'lsa "—" ko'rsatiladi: "ma'lumot yo'q" va "0%"
+    // ikki BOSHQA holat (bu qoida ilgari intizom ballida edi).
+    final behTotal = nb.behaviorGood + nb.behaviorBad;
+    final behPct = behTotal > 0 ? (nb.behaviorGood / behTotal * 100).round() : null;
+    final behColor = behPct == null
+        ? c.muted
+        : (behPct >= 85 ? c.green : (behPct >= 60 ? c.amber : c.red));
 
     // ---- Uy vazifa ----
     final hwDone = nb.homeworkDone;
@@ -212,9 +213,11 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
             const SizedBox(width: 8),
             Expanded(child: _Kpi(value: '$attPct%', label: 'Davomat', color: c.green)),
             const SizedBox(width: 8),
-            Expanded(child: _Kpi(value: '$disc', label: 'Intizom', color: discColor)),
-            const SizedBox(width: 8),
             Expanded(child: _Kpi(value: '$hwPct%', label: 'Uy vazifa', color: _violet(c))),
+            const SizedBox(width: 8),
+            Expanded(
+                child: _Kpi(
+                    value: behPct == null ? '—' : '$behPct%', label: 'Xulq', color: behColor)),
           ],
         ),
       ),
@@ -296,62 +299,6 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                   max: reasonMax.toDouble(),
                   color: r.isLate ? c.amber : c.red,
                   right: '${r.count}',
-                ),
-            ],
-          ),
-        ),
-
-      // Intizomiy ball
-      _Section(
-        title: 'Intizomiy ball',
-        sub: '100 balldan boshlanadi',
-        child: Row(
-          children: [
-            Ring(
-              value: disc.toDouble(),
-              max: 100,
-              size: 104,
-              stroke: 12,
-              color: discColor,
-              center: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text('$disc',
-                      style: TextStyle(fontSize: 26, fontWeight: FontWeight.w800, color: discColor)),
-                  Text('ball', style: TextStyle(fontSize: 10, color: c.muted)),
-                ],
-              ),
-            ),
-            const SizedBox(width: 18),
-            Expanded(
-              child: Column(
-                children: [
-                  _Legend(color: c.green, label: "Rag'bat", value: '+${nb.disciplinePlus.round()}'),
-                  const SizedBox(height: 10),
-                  _Legend(color: c.red, label: 'Jazo', value: '−${nb.disciplineMinus.round()}'),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-
-      // Oylik feedback (baholash)
-      if (feedback.isNotEmpty)
-        _Section(
-          title: 'Oylik feedback (baholash)',
-          sub: "Fan bo'yicha o'rtacha (1-5)",
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              for (final s in feedback)
-                _HBar(
-                  label: s.subjectName,
-                  value: s.avg,
-                  max: 5,
-                  color: gradeColor(s.avg),
-                  right: s.avg.toStringAsFixed(1),
-                  dot: subjectColor(s.subjectId),
                 ),
             ],
           ),

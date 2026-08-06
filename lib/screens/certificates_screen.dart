@@ -1,15 +1,12 @@
-import 'dart:io';
-
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../widgets/sub_scaffold.dart';
 import '../widgets/ui.dart';
 import '../theme/app_theme.dart';
 import '../utils/errors.dart';
 import '../utils/format.dart';
+import '../utils/server_files.dart';
 import '../api/student_api.dart';
 import '../models/models.dart';
 import '../config.dart';
@@ -55,7 +52,8 @@ class _CertificatesScreenState extends State<CertificatesScreen> {
     try {
       final bytes = await StudentApi.certificateBytes(cert.id);
       if (bytes.isEmpty) throw Exception("Fayl bo'sh");
-      final path = await _saveFile(cert, bytes);
+      final path = await saveToAppDir(
+          cert.fileName.trim().isEmpty ? 'sertifikat-${cert.id}' : cert.fileName, bytes);
       if (!mounted) return;
       // Fayl ilovaning SHAXSIY papkasiga tushadi (Downloads'da emas) — shuning uchun
       // xom yo'l ko'rsatilmaydi, o'rniga tizim ko'ruvchisida ochish taklif qilinadi.
@@ -85,27 +83,6 @@ class _CertificatesScreenState extends State<CertificatesScreen> {
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(const SnackBar(content: Text("Faylni ochib bo'lmadi")));
-  }
-
-  /// Faylni diskka yozadi. DIQQAT: bu ilovaning O'Z papkasi (Android'da
-  /// `Android/data/<paket>/files`, iOS'da hujjatlar) — Downloads EMAS. Shu sabab
-  /// foydalanuvchiga yo'l ko'rsatilmaydi, faylni "Ochish" tugmasi orqali ochadi.
-  Future<String> _saveFile(StudentCertificateDto cert, List<int> bytes) async {
-    Directory? dir;
-    if (!kIsWeb && Platform.isAndroid) {
-      try {
-        dir = await getExternalStorageDirectory();
-      } catch (_) {
-        dir = null;
-      }
-    }
-    dir ??= await getApplicationDocumentsDirectory();
-    final safe = cert.fileName.trim().isEmpty
-        ? 'sertifikat-${cert.id}'
-        : cert.fileName.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
-    final file = File('${dir.path}${Platform.pathSeparator}$safe');
-    await file.writeAsBytes(bytes, flush: true);
-    return file.path;
   }
 
   /// Tekshirish havolasini nusxalash (web'dagi "Ulashish").

@@ -1,12 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../api/student_api.dart';
-import '../config.dart';
 import '../models/models.dart';
 import '../theme/app_theme.dart';
 import '../utils/answers.dart';
 import '../utils/errors.dart';
 import '../utils/format.dart';
+import '../utils/server_files.dart';
 import '../widgets/sub_scaffold.dart';
 import '../widgets/ui.dart';
 
@@ -66,18 +65,14 @@ class _OnlineTestScreenState extends State<OnlineTestScreen> {
     }
   }
 
+  /// Savollar PDF'i. `/uploads` endi token talab qiladi — shuning uchun fayl
+  /// yuklab olinib, qurilmadagi nusxasi ochiladi (`openServerFile`).
   Future<void> _openPdf(String url) async {
-    final abs = absFileUrl(url);
-    if (abs == null) {
-      _toast("Savollar fayli biriktirilmagan");
+    if (url.trim().isEmpty) {
+      _toast('Savollar fayli biriktirilmagan');
       return;
     }
-    final uri = Uri.tryParse(abs);
-    if (uri == null) return;
-    try {
-      if (await launchUrl(uri, mode: LaunchMode.externalApplication)) return;
-    } catch (_) {}
-    _toast("Faylni ochib bo'lmadi");
+    await openServerFile(context, url);
   }
 
   void _toast(String msg) {

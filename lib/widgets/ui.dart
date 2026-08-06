@@ -1,8 +1,8 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
-import '../config.dart';
 import '../theme/app_theme.dart';
 import '../utils/format.dart';
+import '../utils/server_files.dart';
 
 /// Umumiy UI komponentlari — web `.student-app` uslubiga mos (card 20px radius, soft shadow, ...).
 
@@ -253,8 +253,9 @@ class Avatar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = AppTheme.of(context);
-    // Server nisbiy yo'l ("/uploads/..") qaytaradi — bazaga ulamasak rasm yuklanmaydi.
-    final url = absFileUrl(imageUrl);
+    // Server nisbiy yo'l ("/uploads/..") qaytaradi — bazaga ulanadi VA token
+    // sarlavhasi qo'shiladi (tokensiz `/uploads` 404 beradi).
+    final img = authImage(imageUrl);
     return Container(
       width: size,
       height: size,
@@ -266,11 +267,9 @@ class Avatar extends StatelessWidget {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
-        image: url != null
-            ? DecorationImage(image: NetworkImage(url), fit: BoxFit.cover)
-            : null,
+        image: img != null ? DecorationImage(image: img, fit: BoxFit.cover) : null,
       ),
-      child: url == null
+      child: img == null
           ? Text(initials(name),
               style: TextStyle(color: Colors.white, fontSize: size * 0.38, fontWeight: FontWeight.w700))
           : null,

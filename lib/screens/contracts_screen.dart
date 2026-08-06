@@ -5,9 +5,9 @@ import '../widgets/ui.dart';
 import '../theme/app_theme.dart';
 import '../utils/errors.dart';
 import '../utils/format.dart';
+import '../utils/server_files.dart';
 import '../api/student_api.dart';
 import '../models/models.dart';
-import '../config.dart';
 
 /// Shartnoma ekrani — WEB: pages/student/Contracts.tsx.
 /// Markaz o'quvchi va ota-ona bilan tuzgan shartnomalarning elektron (PDF) nusxalari.
@@ -22,6 +22,9 @@ class ContractsScreen extends StatefulWidget {
 class _ContractsScreenState extends State<ContractsScreen> {
   List<ContractDoc>? _items;
   String? _error;
+
+  /// Yuklanayotgan shartnoma id'si (kartochka takror bosilmasin).
+  String? _busyId;
 
   @override
   void initState() {
@@ -40,19 +43,27 @@ class _ContractsScreenState extends State<ContractsScreen> {
     }
   }
 
-  /// Shartnoma PDF'ini tashqi ko'ruvchida ochadi (yuklab olish ham shu yerdan).
+  /// Shartnoma PDF'ini qurilmaga saqlab, tizim ko'ruvchisida ochadi.
+  /// `pdfUrl` ("/uploads/...") to'g'ridan-to'g'ri ochilmaydi — `/uploads` endi token
+  /// talab qiladi, brauzer esa sarlavha yubormaydi. Fayl avtorizatsiyalangan
+  /// endpointdan (`/student/contracts/{id}/pdf`) olinadi.
   Future<void> _open(ContractDoc doc) async {
-    var url = doc.pdfUrl;
-    if (url.isEmpty) return;
-    if (!url.startsWith('http')) {
-      url = '$kFileBaseUrl${url.startsWith('/') ? '' : '/'}$url';
-    }
+    if (_busyId != null) return;
+    setState(() => _busyId = doc.id);
+    final messenger = ScaffoldMessenger.of(context);
     try {
-      await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
-    } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Ochib bo'lmadi")));
-      }
+      final bytes = await StudentApi.contractPdfBytes(doc.id);
+      if (bytes.isEmpty) throw Exception("Fayl bo'sh");
+      final path = await saveToAppDir('shartnoma-${doc.number}.pdf', bytes);
+      messenger.hideCurrentSnackBar();
+      if (await launchUrl(Uri.file(path), mode: LaunchMode.externalApplication)) return;
+      messenger.showSnackBar(const SnackBar(content: Text("Ochib bo'lmadi")));
+    } catch (e) {
+      messenger
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text(humanError(e, "Ochib bo'lmadi"))));
+    } finally {
+      if (mounted) setState(() => _busyId = null);
     }
   }
 

@@ -141,7 +141,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   icon: Icons.notifications_outlined,
                   iconColor: const Color(0xFFEA580C),
                   title: 'Push bildirishnoma',
-                  subtitle: 'Yangi baho, xabar, topshiriq',
+                  subtitle: "Yangi baho, davomat, to'lov va e'lonlar",
                   value: _push,
                   onChanged: _togglePush,
                 ),

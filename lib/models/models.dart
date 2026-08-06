@@ -651,7 +651,6 @@ class StudentDashboard {
   final PortalMeta meta;
   final List<StudentLesson> todayLessons;
   final List<HomeworkItem> todayGrades;
-  final int pendingAssignmentsCount;
   final double balance;
   final double monthlyFee;
 
@@ -660,7 +659,6 @@ class StudentDashboard {
     required this.meta,
     required this.todayLessons,
     required this.todayGrades,
-    required this.pendingAssignmentsCount,
     required this.balance,
     required this.monthlyFee,
   });
@@ -670,7 +668,6 @@ class StudentDashboard {
         meta: PortalMeta.fromJson(_map(j['meta'])),
         todayLessons: _list(j['todayLessons'], StudentLesson.fromJson),
         todayGrades: _list(j['todayGrades'], HomeworkItem.fromJson),
-        pendingAssignmentsCount: _i(j['pendingAssignmentsCount']),
         balance: _d(j['balance']),
         monthlyFee: _d(j['monthlyFee']),
       );
@@ -681,7 +678,6 @@ class StudentDashboard {
         'meta': meta.toJson(),
         'todayLessons': todayLessons.map((e) => e.toJson()).toList(),
         'todayGrades': todayGrades.map((e) => e.toJson()).toList(),
-        'pendingAssignmentsCount': pendingAssignmentsCount,
         'balance': balance,
         'monthlyFee': monthlyFee,
       };
@@ -694,7 +690,6 @@ class StudentDashboard {
           meta == other.meta &&
           _deepEq(todayLessons, other.todayLessons) &&
           _deepEq(todayGrades, other.todayGrades) &&
-          pendingAssignmentsCount == other.pendingAssignmentsCount &&
           balance == other.balance &&
           monthlyFee == other.monthlyFee;
 
@@ -704,7 +699,6 @@ class StudentDashboard {
         meta,
         todayLessons,
         todayGrades,
-        pendingAssignmentsCount,
         balance,
         monthlyFee,
       ]);
@@ -955,111 +949,6 @@ class StudentAttendanceFull {
       ]);
 }
 
-class DisciplinePoint {
-  final String id;
-  final String reasonName;
-  final double points;
-  final String note;
-  final String createdAt;
-  final String createdBy;
-  final String source;
-
-  DisciplinePoint({
-    required this.id,
-    required this.reasonName,
-    required this.points,
-    required this.note,
-    required this.createdAt,
-    required this.createdBy,
-    required this.source,
-  });
-
-  factory DisciplinePoint.fromJson(Map<String, dynamic> j) => DisciplinePoint(
-        id: _s(j['id']),
-        reasonName: _s(j['reasonName']),
-        points: _d(j['points']),
-        note: _s(j['note']),
-        createdAt: _s(j['createdAt']),
-        createdBy: _s(j['createdBy']),
-        source: _s(j['source']),
-      );
-
-  /// `DisciplinePoint.fromJson(x.toJson())` — qiymatni saqlaydigan aylanma (offline kesh uchun).
-  Map<String, dynamic> toJson() => <String, dynamic>{
-        'id': id,
-        'reasonName': reasonName,
-        'points': points,
-        'note': note,
-        'createdAt': createdAt,
-        'createdBy': createdBy,
-        'source': source,
-      };
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is DisciplinePoint &&
-          id == other.id &&
-          reasonName == other.reasonName &&
-          points == other.points &&
-          note == other.note &&
-          createdAt == other.createdAt &&
-          createdBy == other.createdBy &&
-          source == other.source;
-
-  @override
-  int get hashCode => _hashProps(<Object?>[
-        id,
-        reasonName,
-        points,
-        note,
-        createdAt,
-        createdBy,
-        source,
-      ]);
-}
-
-class StudentDiscipline {
-  final double remaining;
-  final double plus;
-  final double minus;
-  final List<DisciplinePoint> items;
-
-  StudentDiscipline({required this.remaining, required this.plus, required this.minus, required this.items});
-
-  factory StudentDiscipline.fromJson(Map<String, dynamic> j) => StudentDiscipline(
-        remaining: _d(j['remaining']),
-        plus: _d(j['plus']),
-        minus: _d(j['minus']),
-        items: _list(j['items'], DisciplinePoint.fromJson),
-      );
-
-  /// `StudentDiscipline.fromJson(x.toJson())` — qiymatni saqlaydigan aylanma (offline kesh uchun).
-  Map<String, dynamic> toJson() => <String, dynamic>{
-        'remaining': remaining,
-        'plus': plus,
-        'minus': minus,
-        'items': items.map((e) => e.toJson()).toList(),
-      };
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is StudentDiscipline &&
-          remaining == other.remaining &&
-          plus == other.plus &&
-          minus == other.minus &&
-          _deepEq(items, other.items);
-
-  @override
-  int get hashCode => _hashProps(<Object?>[
-        remaining,
-        plus,
-        minus,
-        items,
-      ]);
-}
-
 class RatingRow {
   final int rank;
   final String studentId;
@@ -1174,274 +1063,6 @@ class StudentRating {
         schoolRows,
         meSchoolRank,
         schoolSize,
-      ]);
-}
-
-class SubjectProgress {
-  final String subjectId;
-  final String subjectName;
-  final int planned;
-  final int conducted;
-  final int remaining;
-  final double percent;
-  final int? expectedByToday;
-  final String? nextLessonDate;
-  final String? lastLessonDate;
-
-  SubjectProgress({
-    required this.subjectId,
-    required this.subjectName,
-    required this.planned,
-    required this.conducted,
-    required this.remaining,
-    required this.percent,
-    this.expectedByToday,
-    this.nextLessonDate,
-    this.lastLessonDate,
-  });
-
-  factory SubjectProgress.fromJson(Map<String, dynamic> j) => SubjectProgress(
-        subjectId: _s(j['subjectId']),
-        subjectName: _s(j['subjectName']),
-        planned: _i(j['planned']),
-        conducted: _i(j['conducted']),
-        remaining: _i(j['remaining']),
-        percent: _d(j['percent']),
-        expectedByToday: _in(j['expectedByToday']),
-        nextLessonDate: _sn(j['nextLessonDate']),
-        lastLessonDate: _sn(j['lastLessonDate']),
-      );
-
-  /// `SubjectProgress.fromJson(x.toJson())` — qiymatni saqlaydigan aylanma (offline kesh uchun).
-  Map<String, dynamic> toJson() => <String, dynamic>{
-        'subjectId': subjectId,
-        'subjectName': subjectName,
-        'planned': planned,
-        'conducted': conducted,
-        'remaining': remaining,
-        'percent': percent,
-        'expectedByToday': expectedByToday,
-        'nextLessonDate': nextLessonDate,
-        'lastLessonDate': lastLessonDate,
-      };
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is SubjectProgress &&
-          subjectId == other.subjectId &&
-          subjectName == other.subjectName &&
-          planned == other.planned &&
-          conducted == other.conducted &&
-          remaining == other.remaining &&
-          percent == other.percent &&
-          expectedByToday == other.expectedByToday &&
-          nextLessonDate == other.nextLessonDate &&
-          lastLessonDate == other.lastLessonDate;
-
-  @override
-  int get hashCode => _hashProps(<Object?>[
-        subjectId,
-        subjectName,
-        planned,
-        conducted,
-        remaining,
-        percent,
-        expectedByToday,
-        nextLessonDate,
-        lastLessonDate,
-      ]);
-}
-
-class StudentSubjectsProgress {
-  final int quarter;
-  final int totalPlanned;
-  final int totalConducted;
-  final double totalPercent;
-  final List<SubjectProgress> subjects;
-
-  StudentSubjectsProgress({
-    required this.quarter,
-    required this.totalPlanned,
-    required this.totalConducted,
-    required this.totalPercent,
-    required this.subjects,
-  });
-
-  factory StudentSubjectsProgress.fromJson(Map<String, dynamic> j) => StudentSubjectsProgress(
-        quarter: _i(j['quarter']),
-        totalPlanned: _i(j['totalPlanned']),
-        totalConducted: _i(j['totalConducted']),
-        totalPercent: _d(j['totalPercent']),
-        subjects: _list(j['subjects'], SubjectProgress.fromJson),
-      );
-
-  /// `StudentSubjectsProgress.fromJson(x.toJson())` — qiymatni saqlaydigan aylanma (offline kesh uchun).
-  Map<String, dynamic> toJson() => <String, dynamic>{
-        'quarter': quarter,
-        'totalPlanned': totalPlanned,
-        'totalConducted': totalConducted,
-        'totalPercent': totalPercent,
-        'subjects': subjects.map((e) => e.toJson()).toList(),
-      };
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is StudentSubjectsProgress &&
-          quarter == other.quarter &&
-          totalPlanned == other.totalPlanned &&
-          totalConducted == other.totalConducted &&
-          totalPercent == other.totalPercent &&
-          _deepEq(subjects, other.subjects);
-
-  @override
-  int get hashCode => _hashProps(<Object?>[
-        quarter,
-        totalPlanned,
-        totalConducted,
-        totalPercent,
-        subjects,
-      ]);
-}
-
-class SubjectLesson {
-  final String date;
-  final int period;
-  final String? startTime;
-  final String? endTime;
-  final String topic;
-  final String? homework;
-  final bool conducted;
-  final bool isPast;
-
-  SubjectLesson({
-    required this.date,
-    required this.period,
-    this.startTime,
-    this.endTime,
-    required this.topic,
-    this.homework,
-    required this.conducted,
-    required this.isPast,
-  });
-
-  factory SubjectLesson.fromJson(Map<String, dynamic> j) => SubjectLesson(
-        date: _s(j['date']),
-        period: _i(j['period']),
-        startTime: _sn(j['startTime']),
-        endTime: _sn(j['endTime']),
-        topic: _s(j['topic']),
-        homework: _sn(j['homework']),
-        conducted: _b(j['conducted']),
-        isPast: _b(j['isPast']),
-      );
-
-  /// `SubjectLesson.fromJson(x.toJson())` — qiymatni saqlaydigan aylanma (offline kesh uchun).
-  Map<String, dynamic> toJson() => <String, dynamic>{
-        'date': date,
-        'period': period,
-        'startTime': startTime,
-        'endTime': endTime,
-        'topic': topic,
-        'homework': homework,
-        'conducted': conducted,
-        'isPast': isPast,
-      };
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is SubjectLesson &&
-          date == other.date &&
-          period == other.period &&
-          startTime == other.startTime &&
-          endTime == other.endTime &&
-          topic == other.topic &&
-          homework == other.homework &&
-          conducted == other.conducted &&
-          isPast == other.isPast;
-
-  @override
-  int get hashCode => _hashProps(<Object?>[
-        date,
-        period,
-        startTime,
-        endTime,
-        topic,
-        homework,
-        conducted,
-        isPast,
-      ]);
-}
-
-class SubjectProgressDetail {
-  final String subjectId;
-  final String subjectName;
-  final int quarter;
-  final int planned;
-  final int conducted;
-  final int remaining;
-  final double percent;
-  final List<SubjectLesson> lessons;
-
-  SubjectProgressDetail({
-    required this.subjectId,
-    required this.subjectName,
-    required this.quarter,
-    required this.planned,
-    required this.conducted,
-    required this.remaining,
-    required this.percent,
-    required this.lessons,
-  });
-
-  factory SubjectProgressDetail.fromJson(Map<String, dynamic> j) => SubjectProgressDetail(
-        subjectId: _s(j['subjectId']),
-        subjectName: _s(j['subjectName']),
-        quarter: _i(j['quarter']),
-        planned: _i(j['planned']),
-        conducted: _i(j['conducted']),
-        remaining: _i(j['remaining']),
-        percent: _d(j['percent']),
-        lessons: _list(j['lessons'], SubjectLesson.fromJson),
-      );
-
-  /// `SubjectProgressDetail.fromJson(x.toJson())` — qiymatni saqlaydigan aylanma (offline kesh uchun).
-  Map<String, dynamic> toJson() => <String, dynamic>{
-        'subjectId': subjectId,
-        'subjectName': subjectName,
-        'quarter': quarter,
-        'planned': planned,
-        'conducted': conducted,
-        'remaining': remaining,
-        'percent': percent,
-        'lessons': lessons.map((e) => e.toJson()).toList(),
-      };
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is SubjectProgressDetail &&
-          subjectId == other.subjectId &&
-          subjectName == other.subjectName &&
-          quarter == other.quarter &&
-          planned == other.planned &&
-          conducted == other.conducted &&
-          remaining == other.remaining &&
-          percent == other.percent &&
-          _deepEq(lessons, other.lessons);
-
-  @override
-  int get hashCode => _hashProps(<Object?>[
-        subjectId,
-        subjectName,
-        quarter,
-        planned,
-        conducted,
-        remaining,
-        percent,
-        lessons,
       ]);
 }
 
@@ -2666,88 +2287,6 @@ class MonthlyAttendance {
       ]);
 }
 
-class MonthlyEvaluation {
-  final String month;
-  final Map<String, double> grades;
-  final double avg;
-
-  MonthlyEvaluation({required this.month, required this.grades, required this.avg});
-
-  factory MonthlyEvaluation.fromJson(Map<String, dynamic> j) => MonthlyEvaluation(
-        month: _s(j['month']),
-        grades: _numMap(j['grades']),
-        avg: _d(j['avg']),
-      );
-
-  /// `MonthlyEvaluation.fromJson(x.toJson())` — qiymatni saqlaydigan aylanma (offline kesh uchun).
-  Map<String, dynamic> toJson() => <String, dynamic>{
-        'month': month,
-        'grades': grades,
-        'avg': avg,
-      };
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is MonthlyEvaluation &&
-          month == other.month &&
-          _deepEq(grades, other.grades) &&
-          avg == other.avg;
-
-  @override
-  int get hashCode => _hashProps(<Object?>[
-        month,
-        grades,
-        avg,
-      ]);
-}
-
-class SubjectEvaluation {
-  final String subjectId;
-  final String subjectName;
-  final double avg;
-  final List<MonthlyEvaluation> evaluations;
-
-  SubjectEvaluation({
-    required this.subjectId,
-    required this.subjectName,
-    required this.avg,
-    required this.evaluations,
-  });
-
-  factory SubjectEvaluation.fromJson(Map<String, dynamic> j) => SubjectEvaluation(
-        subjectId: _s(j['subjectId']),
-        subjectName: _s(j['subjectName']),
-        avg: _d(j['avg']),
-        evaluations: _list(j['evaluations'], MonthlyEvaluation.fromJson),
-      );
-
-  /// `SubjectEvaluation.fromJson(x.toJson())` — qiymatni saqlaydigan aylanma (offline kesh uchun).
-  Map<String, dynamic> toJson() => <String, dynamic>{
-        'subjectId': subjectId,
-        'subjectName': subjectName,
-        'avg': avg,
-        'evaluations': evaluations.map((e) => e.toJson()).toList(),
-      };
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is SubjectEvaluation &&
-          subjectId == other.subjectId &&
-          subjectName == other.subjectName &&
-          avg == other.avg &&
-          _deepEq(evaluations, other.evaluations);
-
-  @override
-  int get hashCode => _hashProps(<Object?>[
-        subjectId,
-        subjectName,
-        avg,
-        evaluations,
-      ]);
-}
-
 class MonthMarks {
   final String month;
   final int homeworkDone;
@@ -2800,208 +2339,6 @@ class MonthMarks {
       ]);
 }
 
-class NotebookAssignmentScore {
-  final String assignmentId;
-  final String subjectName;
-  final String title;
-  final String format;
-  final double maxScore;
-  final double? score;
-  final bool completed;
-
-  NotebookAssignmentScore({
-    required this.assignmentId,
-    required this.subjectName,
-    required this.title,
-    required this.format,
-    required this.maxScore,
-    this.score,
-    required this.completed,
-  });
-
-  factory NotebookAssignmentScore.fromJson(Map<String, dynamic> j) => NotebookAssignmentScore(
-        assignmentId: _s(j['assignmentId']),
-        subjectName: _s(j['subjectName']),
-        title: _s(j['title']),
-        format: _s(j['format']),
-        maxScore: _d(j['maxScore']),
-        score: _dn(j['score']),
-        completed: _b(j['completed']),
-      );
-
-  /// `NotebookAssignmentScore.fromJson(x.toJson())` — qiymatni saqlaydigan aylanma (offline kesh uchun).
-  Map<String, dynamic> toJson() => <String, dynamic>{
-        'assignmentId': assignmentId,
-        'subjectName': subjectName,
-        'title': title,
-        'format': format,
-        'maxScore': maxScore,
-        'score': score,
-        'completed': completed,
-      };
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is NotebookAssignmentScore &&
-          assignmentId == other.assignmentId &&
-          subjectName == other.subjectName &&
-          title == other.title &&
-          format == other.format &&
-          maxScore == other.maxScore &&
-          score == other.score &&
-          completed == other.completed;
-
-  @override
-  int get hashCode => _hashProps(<Object?>[
-        assignmentId,
-        subjectName,
-        title,
-        format,
-        maxScore,
-        score,
-        completed,
-      ]);
-}
-
-class NotebookAssignments {
-  final int count;
-  final int gradedCount;
-  final double totalScore;
-  final double totalMax;
-  final List<NotebookAssignmentScore> items;
-
-  NotebookAssignments({
-    required this.count,
-    required this.gradedCount,
-    required this.totalScore,
-    required this.totalMax,
-    required this.items,
-  });
-
-  factory NotebookAssignments.fromJson(Map<String, dynamic> j) => NotebookAssignments(
-        count: _i(j['count']),
-        gradedCount: _i(j['gradedCount']),
-        totalScore: _d(j['totalScore']),
-        totalMax: _d(j['totalMax']),
-        items: _list(j['items'], NotebookAssignmentScore.fromJson),
-      );
-
-  /// `NotebookAssignments.fromJson(x.toJson())` — qiymatni saqlaydigan aylanma (offline kesh uchun).
-  Map<String, dynamic> toJson() => <String, dynamic>{
-        'count': count,
-        'gradedCount': gradedCount,
-        'totalScore': totalScore,
-        'totalMax': totalMax,
-        'items': items.map((e) => e.toJson()).toList(),
-      };
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is NotebookAssignments &&
-          count == other.count &&
-          gradedCount == other.gradedCount &&
-          totalScore == other.totalScore &&
-          totalMax == other.totalMax &&
-          _deepEq(items, other.items);
-
-  @override
-  int get hashCode => _hashProps(<Object?>[
-        count,
-        gradedCount,
-        totalScore,
-        totalMax,
-        items,
-      ]);
-}
-
-class NotebookDisciplinePoint {
-  final String id;
-  final String reasonName;
-  final double points;
-  final String note;
-  final String createdAt;
-  final String source;
-
-  NotebookDisciplinePoint({
-    required this.id,
-    required this.reasonName,
-    required this.points,
-    required this.note,
-    required this.createdAt,
-    required this.source,
-  });
-
-  factory NotebookDisciplinePoint.fromJson(Map<String, dynamic> j) => NotebookDisciplinePoint(
-        id: _s(j['id']),
-        reasonName: _s(j['reasonName']),
-        points: _d(j['points']),
-        note: _s(j['note']),
-        createdAt: _s(j['createdAt']),
-        source: _s(j['source']),
-      );
-
-  /// `NotebookDisciplinePoint.fromJson(x.toJson())` — qiymatni saqlaydigan aylanma (offline kesh uchun).
-  Map<String, dynamic> toJson() => <String, dynamic>{
-        'id': id,
-        'reasonName': reasonName,
-        'points': points,
-        'note': note,
-        'createdAt': createdAt,
-        'source': source,
-      };
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is NotebookDisciplinePoint &&
-          id == other.id &&
-          reasonName == other.reasonName &&
-          points == other.points &&
-          note == other.note &&
-          createdAt == other.createdAt &&
-          source == other.source;
-
-  @override
-  int get hashCode => _hashProps(<Object?>[
-        id,
-        reasonName,
-        points,
-        note,
-        createdAt,
-        source,
-      ]);
-}
-
-class EvaluationType {
-  final String id;
-  final String name;
-
-  EvaluationType({required this.id, required this.name});
-
-  factory EvaluationType.fromJson(Map<String, dynamic> j) => EvaluationType(id: _s(j['id']), name: _s(j['name']));
-
-  /// `EvaluationType.fromJson(x.toJson())` — qiymatni saqlaydigan aylanma (offline kesh uchun).
-  Map<String, dynamic> toJson() => <String, dynamic>{
-        'id': id,
-        'name': name,
-      };
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is EvaluationType &&
-          id == other.id &&
-          name == other.name;
-
-  @override
-  int get hashCode => _hashProps(<Object?>[
-        id,
-        name,
-      ]);
-}
-
 class StudentNotebook {
   final String id;
   final String fullName;
@@ -3016,14 +2353,6 @@ class StudentNotebook {
   final int attended;
   final double attendancePct;
   final List<AttendanceReasonCount> reasons;
-  final double disciplineScore;
-  final double disciplinePlus;
-  final double disciplineMinus;
-  final List<NotebookDisciplinePoint> disciplinePoints;
-  final NotebookAssignments assignments;
-  final List<EvaluationType> evaluationTypes;
-  final List<MonthlyEvaluation> evaluations;
-  final List<SubjectEvaluation> evaluationsBySubject;
   final int homeworkDone;
   final int homeworkMissed;
   final int behaviorGood;
@@ -3043,14 +2372,6 @@ class StudentNotebook {
     required this.attended,
     required this.attendancePct,
     required this.reasons,
-    required this.disciplineScore,
-    required this.disciplinePlus,
-    required this.disciplineMinus,
-    required this.disciplinePoints,
-    required this.assignments,
-    required this.evaluationTypes,
-    required this.evaluations,
-    required this.evaluationsBySubject,
     required this.homeworkDone,
     required this.homeworkMissed,
     required this.behaviorGood,
@@ -3071,14 +2392,6 @@ class StudentNotebook {
         attended: _i(j['attended']),
         attendancePct: _d(j['attendancePct']),
         reasons: _list(j['reasons'], AttendanceReasonCount.fromJson),
-        disciplineScore: _d(j['disciplineScore']),
-        disciplinePlus: _d(j['disciplinePlus']),
-        disciplineMinus: _d(j['disciplineMinus']),
-        disciplinePoints: _list(j['disciplinePoints'], NotebookDisciplinePoint.fromJson),
-        assignments: NotebookAssignments.fromJson(_map(j['assignments'])),
-        evaluationTypes: _list(j['evaluationTypes'], EvaluationType.fromJson),
-        evaluations: _list(j['evaluations'], MonthlyEvaluation.fromJson),
-        evaluationsBySubject: _list(j['evaluationsBySubject'], SubjectEvaluation.fromJson),
         homeworkDone: _i(j['homeworkDone']),
         homeworkMissed: _i(j['homeworkMissed']),
         behaviorGood: _i(j['behaviorGood']),
@@ -3100,14 +2413,6 @@ class StudentNotebook {
         'attended': attended,
         'attendancePct': attendancePct,
         'reasons': reasons.map((e) => e.toJson()).toList(),
-        'disciplineScore': disciplineScore,
-        'disciplinePlus': disciplinePlus,
-        'disciplineMinus': disciplineMinus,
-        'disciplinePoints': disciplinePoints.map((e) => e.toJson()).toList(),
-        'assignments': assignments.toJson(),
-        'evaluationTypes': evaluationTypes.map((e) => e.toJson()).toList(),
-        'evaluations': evaluations.map((e) => e.toJson()).toList(),
-        'evaluationsBySubject': evaluationsBySubject.map((e) => e.toJson()).toList(),
         'homeworkDone': homeworkDone,
         'homeworkMissed': homeworkMissed,
         'behaviorGood': behaviorGood,
@@ -3131,14 +2436,6 @@ class StudentNotebook {
           attended == other.attended &&
           attendancePct == other.attendancePct &&
           _deepEq(reasons, other.reasons) &&
-          disciplineScore == other.disciplineScore &&
-          disciplinePlus == other.disciplinePlus &&
-          disciplineMinus == other.disciplineMinus &&
-          _deepEq(disciplinePoints, other.disciplinePoints) &&
-          assignments == other.assignments &&
-          _deepEq(evaluationTypes, other.evaluationTypes) &&
-          _deepEq(evaluations, other.evaluations) &&
-          _deepEq(evaluationsBySubject, other.evaluationsBySubject) &&
           homeworkDone == other.homeworkDone &&
           homeworkMissed == other.homeworkMissed &&
           behaviorGood == other.behaviorGood &&
@@ -3159,14 +2456,6 @@ class StudentNotebook {
         attended,
         attendancePct,
         reasons,
-        disciplineScore,
-        disciplinePlus,
-        disciplineMinus,
-        disciplinePoints,
-        assignments,
-        evaluationTypes,
-        evaluations,
-        evaluationsBySubject,
         homeworkDone,
         homeworkMissed,
         behaviorGood,
@@ -3441,7 +2730,7 @@ class OnlineTest {
   final String startAt;
   final String endAt;
 
-  /// Savollar fayli ("/uploads/...") — statik tarqatiladi, `absFileUrl` bilan ochiladi.
+  /// Savollar fayli ("/uploads/...") — TOKEN talab qiladi, `openServerFile` bilan ochiladi.
   final String pdfUrl;
   final String pdfName;
   final String state;

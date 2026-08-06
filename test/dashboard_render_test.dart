@@ -15,7 +15,6 @@ const _dashboardJson = '''
   "meta": {"lessonTimes": [], "absenceReasons": [], "currentQuarter": 1, "currentWeek": 1},
   "todayLessons": [],
   "todayGrades": [],
-  "pendingAssignmentsCount": 0,
   "balance": -150000,
   "monthlyFee": 450000
 }
@@ -29,9 +28,6 @@ const _notebookJson = '''
   "attendance": {"missedDays": {}, "illnessDays": {}, "missedLessons": {}, "illnessLessons": {}, "lateCount": {}},
   "conducted": 40, "attended": 34, "attendancePct": 85,
   "reasons": [],
-  "disciplineScore": 90, "disciplinePlus": 5, "disciplineMinus": 5, "disciplinePoints": [],
-  "assignments": {"count": 0, "gradedCount": 0, "totalScore": 0, "totalMax": 0, "items": []},
-  "evaluationTypes": [], "evaluations": [], "evaluationsBySubject": [],
   "homeworkDone": 8, "homeworkMissed": 2, "behaviorGood": 3, "behaviorBad": 1, "marksTrend": []
 }
 ''';
@@ -69,18 +65,15 @@ const _notificationsJson = '''
 }
 ''';
 
-/// Intizom balli 0 bo'lgan o'quvchi — "0 ball" va "ma'lumot yo'q" farqi uchun.
-const _zeroDisciplineNotebookJson = '''
+/// Xulqi FAQAT salbiy o'quvchi — "0%" va "ma'lumot yo'q" (—) farqi uchun.
+const _zeroBehaviorNotebookJson = '''
 {
   "id": "s1", "fullName": "Ali Valiyev", "className": "Ingliz tili A1", "balance": 0, "avgGrade": 0,
   "subjects": [], "grades": {},
   "attendance": {"missedDays": {}, "illnessDays": {}, "missedLessons": {}, "illnessLessons": {}, "lateCount": {}},
   "conducted": 0, "attended": 0, "attendancePct": 0,
   "reasons": [],
-  "disciplineScore": 0, "disciplinePlus": 0, "disciplineMinus": 100, "disciplinePoints": [],
-  "assignments": {"count": 0, "gradedCount": 0, "totalScore": 0, "totalMax": 0, "items": []},
-  "evaluationTypes": [], "evaluations": [], "evaluationsBySubject": [],
-  "homeworkDone": 0, "homeworkMissed": 0, "behaviorGood": 0, "behaviorBad": 0, "marksTrend": []
+  "homeworkDone": 0, "homeworkMissed": 0, "behaviorGood": 0, "behaviorBad": 5, "marksTrend": []
 }
 ''';
 
@@ -154,24 +147,24 @@ void main() {
     expect(find.text('Davomat'), findsOneWidget);
   });
 
-  // REGRESSIYA (dashboard_screen.dart:159): ilgari `disciplineRaw != 0 ? ... : 100`
-  // tufayli intizom balli 0 bo'lgan o'quvchi YASHIL "100" ko'rar edi.
-  testWidgets("intizom balli 0 — '100' emas, '0' ko'rsatiladi", (tester) async {
-    // Baland ekran: intizom kartasi ListView ning pastida — kichik ekranda
+  // "MA'LUMOT YO'Q" (belgi umuman yo'q → "—") va "0%" ikki BOSHQA holat.
+  // Bu qoida ilgari intizom ballida edi; modul olib tashlangach "Xulq" kartasiga o'tdi.
+  testWidgets("xulq faqat salbiy — '—' emas, '0%' ko'rsatiladi", (tester) async {
+    // Baland ekran: xulq kartasi ListView ning pastida — kichik ekranda
     // umuman qurilmaydi va `find.text` uni topa olmaydi.
     tester.view.physicalSize = const Size(800 * 3, 2000 * 3);
     tester.view.devicePixelRatio = 3.0;
     addTearDown(tester.view.reset);
 
-    ApiClient.dio.httpClientAdapter = _FakeAdapter(notebook: _zeroDisciplineNotebookJson);
+    ApiClient.dio.httpClientAdapter = _FakeAdapter(notebook: _zeroBehaviorNotebookJson);
 
     await tester.pumpWidget(_app());
     await _settle(tester);
 
     expect(tester.takeException(), isNull);
 
-    final card = find.ancestor(of: find.text('Intizom balli'), matching: find.byType(Column)).first;
-    expect(find.descendant(of: card, matching: find.text('0')), findsOneWidget);
-    expect(find.descendant(of: card, matching: find.text('100')), findsNothing);
+    final card = find.ancestor(of: find.text('Xulq'), matching: find.byType(Column)).first;
+    expect(find.descendant(of: card, matching: find.text('0%')), findsOneWidget);
+    expect(find.descendant(of: card, matching: find.text('—')), findsNothing);
   });
 }

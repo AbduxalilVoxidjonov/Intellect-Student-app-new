@@ -1,9 +1,8 @@
-// StatisticsScreen / AttendanceScreen / GradesScreen / DisciplineScreen —
+// StatisticsScreen / AttendanceScreen / GradesScreen —
 // har biri uchun: (1) muvaffaqiyat, (2) API xatosi, (3) bo'sh ma'lumot.
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:student/screens/attendance_screen.dart';
-import 'package:student/screens/discipline_screen.dart';
 import 'package:student/screens/grades_screen.dart';
 import 'package:student/screens/statistics_screen.dart';
 
@@ -18,9 +17,6 @@ const _notebookJson = '''
                  "illnessLessons": {}, "lateCount": {"1": 3}},
   "conducted": 40, "attended": 34, "attendancePct": 85,
   "reasons": [{"reasonId":"r1","name":"Kasallik","short":"K","isLate":false,"count":3}],
-  "disciplineScore": 92, "disciplinePlus": 10, "disciplineMinus": 18, "disciplinePoints": [],
-  "assignments": {}, "evaluationTypes": [], "evaluations": [],
-  "evaluationsBySubject": [{"subjectId":"sub1","subjectName":"Grammar","avg":4.5,"evaluations":[]}],
   "homeworkDone": 8, "homeworkMissed": 2, "behaviorGood": 3, "behaviorBad": 1,
   "marksTrend": [{"month":"2026-01","homeworkDone":4,"homeworkMissed":1,
                   "behaviorGood":2,"behaviorBad":0}]
@@ -28,9 +24,7 @@ const _notebookJson = '''
 ''';
 
 const _emptyNotebookJson = '''
-{"subjects": [], "grades": {}, "attendance": {}, "reasons": [], "disciplinePoints": [],
- "assignments": {}, "evaluationTypes": [], "evaluations": [], "evaluationsBySubject": [],
- "marksTrend": []}
+{"subjects": [], "grades": {}, "attendance": {}, "reasons": [], "marksTrend": []}
 ''';
 
 void main() {
@@ -49,8 +43,8 @@ void main() {
       expect(find.text('Baholar trendi'), findsOneWidget);
       expect(find.text("Fanlar bo'yicha o'rtacha"), findsOneWidget);
       expect(find.text('Davomat'), findsWidgets);
-      // KPI plitasining yorlig'i — ekranda 'Intizom' (statistics_screen.dart:219).
-      expect(find.text('Intizom'), findsOneWidget);
+      // KPI plitasining yorlig'i — intizom o'rniga endi 'Xulq' (jurnal belgilaridan).
+      expect(find.text('Xulq'), findsOneWidget);
       expect(find.text('85%'), findsWidgets); // davomat foizi (KPI + donut)
       expect(find.text('Grammar'), findsWidgets);
     });
@@ -247,56 +241,6 @@ void main() {
       expect(find.text('0.00'), findsOneWidget);
       expect(find.text("Baholar yo'q. Hozircha baho qo'yilmagan."), findsOneWidget);
       expect(find.textContaining('NaN'), findsNothing);
-    });
-  });
-
-  // =========================================================================
-  group('DisciplineScreen', () {
-    testWidgets('muvaffaqiyatli yuklash', (tester) async {
-      final api = installFakeApi();
-      api.on('/student/discipline', '''
-{
-  "remaining": 85, "plus": 10, "minus": 25,
-  "items": [
-    {"id":"d1","reasonName":"Darsga kech qolish","points":-5,"note":"","createdAt":"2026-03-01",
-     "createdBy":"","source":"Jurnal"},
-    {"id":"d2","reasonName":"Faol ishtirok","points":10,"note":"Olimpiada","createdAt":"2026-03-05",
-     "createdBy":"","source":""}
-  ]
-}
-''');
-
-      await tester.pumpWidget(wrapRoot(const DisciplineScreen()));
-      await settle(tester);
-      expectNoRealErrors(tester);
-
-      expect(find.text('Joriy intizomiy ball'), findsOneWidget);
-      expect(find.text('85'), findsOneWidget);
-      expect(find.text('+10'), findsWidgets);
-      expect(find.text('−25'), findsOneWidget);
-      expect(find.text('Darsga kech qolish'), findsOneWidget);
-    });
-
-    testWidgets('API 500 — xato holati', (tester) async {
-      final api = installFakeApi();
-      api.failOn('/student/discipline');
-
-      await tester.pumpWidget(wrapRoot(const DisciplineScreen()));
-      await settle(tester);
-      expectNoRealErrors(tester);
-
-      expect(find.textContaining("Yuklab bo'lmadi"), findsOneWidget);
-    });
-
-    testWidgets("bo'sh ma'lumot — bo'sh holat", (tester) async {
-      final api = installFakeApi();
-      api.on('/student/discipline', '{}');
-
-      await tester.pumpWidget(wrapRoot(const DisciplineScreen()));
-      await settle(tester);
-      expectNoRealErrors(tester);
-
-      expect(find.text("Yozuv yo'q. Hozircha intizomiy ball o'zgarmagan."), findsOneWidget);
     });
   });
 }

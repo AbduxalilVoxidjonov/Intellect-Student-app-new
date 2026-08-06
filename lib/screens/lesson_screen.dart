@@ -2,11 +2,10 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../api/student_api.dart';
-import '../config.dart';
 import '../models/models.dart';
 import '../theme/app_theme.dart';
+import '../utils/server_files.dart';
 import '../widgets/sub_scaffold.dart';
 import '../widgets/ui.dart';
 
@@ -94,20 +93,10 @@ class _LessonScreenState extends State<LessonScreen> {
     }
   }
 
-  /// Dars fayli (PDF/audio/video) ochiladi. Serverdan nisbiy yo'l ("/uploads/..") kelsa
-  /// bazaga ulaymiz — aks holda `launchUrl` sxemasiz manzilni ocholmaydi.
+  /// Dars fayli (PDF/audio/video) ochiladi. `/uploads` tokensiz 404 qaytargani uchun
+  /// fayl token bilan yuklab olinadi va qurilmadagi nusxasi ochiladi (`openServerFile`).
   Future<void> _open(String url) async {
-    final abs = absFileUrl(url);
-    if (abs == null) return;
-    final uri = Uri.tryParse(abs);
-    if (uri == null) return;
-    try {
-      if (await launchUrl(uri, mode: LaunchMode.externalApplication)) return;
-    } catch (_) {}
-    if (!mounted) return;
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(const SnackBar(content: Text("Faylni ochib bo'lmadi")));
+    await openServerFile(context, url);
   }
 
   /// YAROQLI savollar: `correctIndex` variantlar oralig'idan tashqarida bo'lsa

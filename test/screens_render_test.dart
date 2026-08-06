@@ -16,7 +16,7 @@ const _dashboardJson = '''
 {
   "profile": {"id": "s1", "fullName": "Ali Valiyev", "className": "Ingliz tili Intermediate B2 kechki guruh", "birthDate": "", "gender": "male", "parentFullName": "", "parentPhone": "", "enrollmentDate": ""},
   "meta": {"lessonTimes": [], "absenceReasons": [], "currentQuarter": 1, "currentWeek": 1},
-  "todayLessons": [], "todayGrades": [], "pendingAssignmentsCount": 0, "balance": 0, "monthlyFee": 0
+  "todayLessons": [], "todayGrades": [], "balance": 0, "monthlyFee": 0
 }
 ''';
 

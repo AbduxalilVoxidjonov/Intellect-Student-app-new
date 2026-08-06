@@ -1,12 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../api/student_api.dart';
-import '../config.dart';
 import '../models/models.dart';
 import '../theme/app_theme.dart';
 import '../utils/diff.dart';
 import '../utils/errors.dart';
 import '../utils/format.dart';
+import '../utils/server_files.dart';
 import '../widgets/sub_scaffold.dart';
 import '../widgets/ui.dart';
 
@@ -587,7 +586,7 @@ class AiCheckResultScreen extends StatelessWidget {
                       'Ovozni tinglash',
                       icon: Icons.volume_up_rounded,
                       kind: BtnKind.soft,
-                      onTap: () => _openAudio(rec.audioUrl),
+                      onTap: () => _openAudio(context, rec.audioUrl),
                     ),
                     const SizedBox(height: 12),
                   ],
@@ -844,11 +843,10 @@ class AiCheckResultScreen extends StatelessWidget {
     );
   }
 
-  Future<void> _openAudio(String path) async {
-    final url = path.startsWith('http') ? path : '$kFileBaseUrl$path';
-    final uri = Uri.tryParse(url);
-    if (uri == null) return;
-    await launchUrl(uri, mode: LaunchMode.externalApplication);
+  /// Ovoz yozuvi `/uploads` da turadi va endi token talab qiladi — brauzerga
+  /// uzatib bo'lmaydi, shuning uchun yuklab olinib qurilmada ochiladi.
+  Future<void> _openAudio(BuildContext context, String path) async {
+    await openServerFile(context, path);
   }
 
   /// IELTS Writing band kartasi — 4 mezon + umumiy band.

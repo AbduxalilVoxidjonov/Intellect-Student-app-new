@@ -145,16 +145,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final conducted = nb?.conducted ?? 0;
     final missed = conducted - attended > 0 ? conducted - attended : 0;
     final attPct = (nb?.attendancePct ?? 0).round();
-    // Intizom balli: "MA'LUMOT YO'Q" (notebook kelmadi) va "0 ball" — ikki BOSHQA holat.
-    // Ilgari `disciplineRaw != 0 ? disciplineRaw : 100` turardi: eng yomon intizomli
-    // o'quvchi (0 ball) yashil "100" ko'rar edi.
-    final discipline = nb?.disciplineScore.round();
     final hwDone = nb?.homeworkDone ?? 0;
     final hwMissed = nb?.homeworkMissed ?? 0;
     final hwPct = hwDone + hwMissed > 0 ? (hwDone / (hwDone + hwMissed) * 100).round() : 0;
-    final discColor = discipline == null
+    // Xulq: jurnaldagi "yaxshi xulq" ulushi. Belgi umuman qo'yilmagan bo'lsa "—"
+    // ko'rsatiladi — "MA'LUMOT YO'Q" va "0%" ikki BOSHQA holat (intizom ballida
+    // ham xuddi shu qoida bor edi, modul ketgach shu kartaga o'tdi).
+    final behGood = nb?.behaviorGood ?? 0;
+    final behBad = nb?.behaviorBad ?? 0;
+    final behTotal = behGood + behBad;
+    final behPct = behTotal > 0 ? (behGood / behTotal * 100).round() : null;
+    final behColor = behPct == null
         ? c.muted
-        : (discipline >= 85 ? c.green : (discipline >= 60 ? c.amber : c.red));
+        : (behPct >= 85 ? c.green : (behPct >= 60 ? c.amber : c.red));
 
     final isStudent = session.role != 'parent';
 
@@ -319,19 +322,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
             children: [
               Expanded(
                 child: _Stat(
-                  icon: Icons.verified_user_rounded,
-                  label: 'Intizom balli',
-                  value: discipline == null ? '—' : '$discipline',
-                  color: discColor,
+                  icon: Icons.check_circle_rounded,
+                  label: 'Uy vazifa',
+                  value: '$hwPct%',
+                  color: _violet(c),
                 ),
               ),
               const SizedBox(width: 10),
               Expanded(
                 child: _Stat(
-                  icon: Icons.check_circle_rounded,
-                  label: 'Uy vazifa',
-                  value: '$hwPct%',
-                  color: _violet(c),
+                  icon: Icons.emoji_emotions_rounded,
+                  label: 'Xulq',
+                  value: behPct == null ? '—' : '$behPct%',
+                  color: behColor,
+                  sub: behTotal > 0 ? '$behGood/$behTotal belgi' : null,
                 ),
               ),
             ],

@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import '../api/student_api.dart';
-import '../config.dart';
 import '../models/models.dart';
 import '../theme/app_theme.dart';
 import '../utils/errors.dart';
 import '../utils/format.dart';
+import '../utils/server_files.dart';
 import '../utils/support_slots.dart';
 import '../widgets/sub_scaffold.dart';
 import '../widgets/ui.dart';
@@ -409,8 +409,8 @@ class _TeacherAvatar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = AppTheme.of(context);
-    // Nisbiy "/uploads/.." manzilni bazaga ulaymiz (aks holda rasm yuklanmaydi).
-    final url = absFileUrl(t.photoUrl);
+    // Nisbiy "/uploads/.." manzil bazaga ulanadi va token sarlavhasi qo'shiladi.
+    final img = authImage(t.photoUrl);
     return Container(
       width: 44,
       height: 44,
@@ -418,11 +418,9 @@ class _TeacherAvatar extends StatelessWidget {
       decoration: BoxDecoration(
         color: c.accentSoft,
         borderRadius: BorderRadius.circular(14),
-        image: url != null
-            ? DecorationImage(image: NetworkImage(url), fit: BoxFit.cover)
-            : null,
+        image: img != null ? DecorationImage(image: img, fit: BoxFit.cover) : null,
       ),
-      child: url == null
+      child: img == null
           ? Text(initials(t.fullName),
               style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: c.accent))
           : null,

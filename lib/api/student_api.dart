@@ -147,32 +147,8 @@ class StudentApi {
         StudentAttendanceFull.fromJson,
       );
 
-  static Future<StudentDiscipline> discipline({String? studentId}) async => _obj(
-        await ApiClient.dio.get('/student/discipline', queryParameters: _sid(studentId)),
-        StudentDiscipline.fromJson,
-      );
-
   static Future<StudentRating> rating({String? studentId}) async =>
       _obj(await ApiClient.dio.get('/student/rating', queryParameters: _sid(studentId)), StudentRating.fromJson);
-
-  static Future<StudentSubjectsProgress> subjectsProgress({int quarter = 1, String? studentId}) async => _obj(
-        await ApiClient.dio
-            .get('/student/subjects-progress', queryParameters: {'quarter': quarter, ...?_sid(studentId)}),
-        StudentSubjectsProgress.fromJson,
-      );
-
-  static Future<SubjectProgressDetail> subjectProgressDetail(
-    String subjectId, {
-    int quarter = 1,
-    String? studentId,
-  }) async =>
-      _obj(
-        await ApiClient.dio.get(
-          '/student/subjects-progress/$subjectId',
-          queryParameters: {'quarter': quarter, ...?_sid(studentId)},
-        ),
-        SubjectProgressDetail.fromJson,
-      );
 
   // ---------- Finance ----------
   static Future<StudentFinance> finance({String? studentId}) async =>
@@ -375,4 +351,17 @@ class StudentApi {
   /// O'quvchi/ota-ona bilan tuzilgan shartnomalarning elektron nusxalari (yangisi birinchi).
   static Future<List<ContractDoc>> contracts({String? studentId}) async =>
       _arr(await ApiClient.dio.get('/student/contracts', queryParameters: _sid(studentId)), ContractDoc.fromJson);
+
+  /// Shartnoma PDF'ini baytlar ko'rinishida oladi.
+  /// DIQQAT: `pdfUrl` ("/uploads/...") to'g'ridan-to'g'ri OCHILMAYDI — `/uploads`
+  /// tokensiz 404 qaytaradi. Fayl faqat shu avtorizatsiyalangan endpointdan olinadi.
+  static Future<List<int>> contractPdfBytes(String id, {String? studentId}) async {
+    final res = await ApiClient.dio.get<List<int>>(
+      '/student/contracts/$id/pdf',
+      queryParameters: _sid(studentId),
+      options: Options(responseType: ResponseType.bytes),
+    );
+    if (!ApiClient.ok(res)) throw Exception(_bytesMessage(res.data) ?? "Shartnomani yuklab bo'lmadi");
+    return res.data ?? const <int>[];
+  }
 }
