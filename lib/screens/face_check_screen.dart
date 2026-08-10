@@ -742,19 +742,24 @@ class _FaceCheckScreenState extends State<FaceCheckScreen> with WidgetsBindingOb
       _ => "To'g'ri qarang — surat olinmoqda",
     };
 
+    // Ekran kengligiga moslashtirilgan kamera o'lchami.
+    // Gorizontal padding (20*2=40) va maxWidth=460 hisobga olinadi.
+    final screenW = MediaQuery.sizeOf(context).width;
+    final circleSide = (screenW - 40).clamp(260.0, 340.0);
+
     return [
       // Kamera doira ichida — foydalanuvchi yuzini qayerga joylashni darrov
       // tushunadi (to'rtburchak kadrda odamlar yuzni chetga qo'yib yuboradi).
       Center(
         child: Container(
-          width: 240,
-          height: 240,
+          width: circleSide,
+          height: circleSide,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
             color: c.surface3,
             border: Border.all(
               color: _hint == null ? c.green : c.border,
-              width: 3,
+              width: 3.5,
             ),
           ),
           clipBehavior: Clip.antiAlias,
