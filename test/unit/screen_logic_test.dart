@@ -327,6 +327,32 @@ void main() {
   });
 
   // ---------------------------------------------------------------------------
+  // medalGradient (podium) — jadval bilan BIR XIL palitra bo'lishi shart.
+  // ---------------------------------------------------------------------------
+  group('medalGradient', () {
+    test('birinchi rang AYNAN medalColor — podium va jadval mos keladi', () {
+      for (final rank in [1, 2, 3]) {
+        expect(medalGradient(rank).first, medalColor(rank),
+            reason: '$rank-o\'rin podiumda va jadvalda bir xil rangda bo\'lsin');
+      }
+    });
+
+    test('har doim ikkita rang qaytadi (gradient uchun) va ikkinchisi TO\'Qroq', () {
+      for (final rank in [1, 2, 3, 4, 0, -5]) {
+        final g = medalGradient(rank);
+        expect(g, hasLength(2));
+        expect(g.last.computeLuminance(), lessThan(g.first.computeLuminance()),
+            reason: 'to\'q ton matn/ramka uchun ishlatiladi');
+      }
+    });
+
+    test('noma\'lum o\'rin — bronza (rang yo\'qolib qolmaydi)', () {
+      expect(medalGradient(9), medalGradient(3));
+      expect(medalGradient(0), medalGradient(3));
+    });
+  });
+
+  // ---------------------------------------------------------------------------
   // groupSlotsByDate (ilgari support_screen.dart)
   // ---------------------------------------------------------------------------
   group('groupSlotsByDate', () {
@@ -412,6 +438,158 @@ void main() {
     test("o'chirilgan so'z yaxshilangan tomonda iz qoldirmaydi", () {
       final t = diffImproved('I really go home', 'I go home');
       expect(changed(t), isEmpty);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // DAVR (hafta/oy) yordamchilari — "Umumiy statistika" ekranidagi filtr
+  // (lib/utils/format.dart → weekStart, weekEnd, monthBounds, isoDate, fmtRange)
+  // ---------------------------------------------------------------------------
+  group('weekStart / weekEnd', () {
+    test('hafta DUSHANBAdan boshlanadi va YAKSHANBAda tugaydi', () {
+      // 2026-08-05 — chorshanba.
+      final d = DateTime(2026, 8, 5);
+      expect(d.weekday, DateTime.wednesday);
+      expect(weekStart(d), DateTime(2026, 8, 3));
+      expect(weekEnd(d), DateTime(2026, 8, 9));
+      expect(weekStart(d).weekday, DateTime.monday);
+      expect(weekEnd(d).weekday, DateTime.sunday);
+    });
+
+    test('dushanbaning o\'zi — hafta boshi (orqaga surilmaydi)', () {
+      final mon = DateTime(2026, 8, 3);
+      expect(weekStart(mon), mon);
+      expect(weekEnd(mon), DateTime(2026, 8, 9));
+    });
+
+    test('yakshanba OLDINGI dushanbaga tegishli (o\'zbekcha hafta)', () {
+      final sun = DateTime(2026, 8, 9);
+      expect(weekStart(sun), DateTime(2026, 8, 3));
+      expect(weekEnd(sun), sun);
+    });
+
+    test('yil almashuvi: 2026-01-01 (payshanba) → 2025-12-29 dan 2026-01-04 gacha', () {
+      final d = DateTime(2026, 1, 1);
+      expect(weekStart(d), DateTime(2025, 12, 29));
+      expect(weekEnd(d), DateTime(2026, 1, 4));
+    });
+
+    test('kabisa yili: 2024-02-29 (juma) haftasi', () {
+      final d = DateTime(2024, 2, 29);
+      expect(weekStart(d), DateTime(2024, 2, 26));
+      expect(weekEnd(d), DateTime(2024, 3, 3));
+    });
+
+    test('soat/daqiqa tashlanadi — natija doim yarim tun', () {
+      final s = weekStart(DateTime(2026, 8, 5, 23, 59, 59));
+      expect(s, DateTime(2026, 8, 3));
+      expect(s.hour, 0);
+      expect(s.minute, 0);
+    });
+
+    test('weekEnd har doim weekStart + 6 kun (barcha hafta kunlari uchun)', () {
+      for (var i = 0; i < 14; i++) {
+        final d = DateTime(2026, 12, 22 + i); // dekabr → yanvar chegarasidan o'tadi
+        expect(weekEnd(d).difference(weekStart(d)).inDays, 6);
+        expect(weekStart(d).weekday, DateTime.monday);
+        expect(weekEnd(d).weekday, DateTime.sunday);
+      }
+    });
+  });
+
+  group('monthBounds', () {
+    test('oddiy oy — 1-sanadan oxirgi kungacha', () {
+      final (from, to) = monthBounds(DateTime(2026, 8, 17));
+      expect(from, DateTime(2026, 8, 1));
+      expect(to, DateTime(2026, 8, 31));
+    });
+
+    test('30 kunlik oy', () {
+      final (from, to) = monthBounds(DateTime(2026, 4, 30));
+      expect(from, DateTime(2026, 4, 1));
+      expect(to, DateTime(2026, 4, 30));
+    });
+
+    test('fevral: oddiy yil 28, kabisa yili 29', () {
+      expect(monthBounds(DateTime(2026, 2, 10)).$2, DateTime(2026, 2, 28));
+      expect(monthBounds(DateTime(2024, 2, 10)).$2, DateTime(2024, 2, 29));
+      // 2000 — kabisa (400 ga bo'linadi), 1900 — emas.
+      expect(monthBounds(DateTime(2000, 2, 1)).$2.day, 29);
+      expect(monthBounds(DateTime(1900, 2, 1)).$2.day, 28);
+    });
+
+    test('dekabr — keyingi yilga oshib ketmaydi', () {
+      final (from, to) = monthBounds(DateTime(2026, 12, 31));
+      expect(from, DateTime(2026, 12, 1));
+      expect(to, DateTime(2026, 12, 31));
+    });
+
+    test('yanvar — oldingi yilga tushmaydi', () {
+      final (from, to) = monthBounds(DateTime(2026, 1, 1));
+      expect(from, DateTime(2026, 1, 1));
+      expect(to, DateTime(2026, 1, 31));
+    });
+  });
+
+  group('isoDate', () {
+    test('"YYYY-MM-DD" — oy/kun ikki xonali', () {
+      expect(isoDate(DateTime(2026, 8, 5)), '2026-08-05');
+      expect(isoDate(DateTime(2026, 12, 31)), '2026-12-31');
+      expect(isoDate(DateTime(2026, 1, 9)), '2026-01-09');
+    });
+
+    test('soat qo\'shilmaydi (kechqurungi vaqt ham o\'sha kun)', () {
+      expect(isoDate(DateTime(2026, 8, 5, 23, 59)), '2026-08-05');
+    });
+
+    test('weekStart/monthBounds natijalari to\'g\'ridan-to\'g\'ri so\'rovga ketadi', () {
+      final d = DateTime(2026, 8, 5);
+      expect(isoDate(weekStart(d)), '2026-08-03');
+      expect(isoDate(weekEnd(d)), '2026-08-09');
+      final (from, to) = monthBounds(d);
+      expect([isoDate(from), isoDate(to)], ['2026-08-01', '2026-08-31']);
+    });
+  });
+
+  group('fmtRange', () {
+    test('bitta oy ichida — oy nomi bir marta', () {
+      expect(fmtRange(DateTime(2026, 8, 3), DateTime(2026, 8, 9)), '3–9 avgust');
+    });
+
+    test('oylar farq qilsa — ikkala oy nomi', () {
+      expect(fmtRange(DateTime(2026, 7, 28), DateTime(2026, 8, 3)), '28 iyul – 3 avgust');
+    });
+
+    test('yil almashuvi — yillar ham ko\'rsatiladi', () {
+      expect(
+        fmtRange(DateTime(2025, 12, 29), DateTime(2026, 1, 4)),
+        '29 dekabr 2025 – 4 yanvar 2026',
+      );
+    });
+
+    test('bitta kun — takrorlanmaydi', () {
+      expect(fmtRange(DateTime(2026, 8, 5), DateTime(2026, 8, 5)), '5 avgust');
+    });
+
+    test('to\'liq oy oralig\'i', () {
+      final (from, to) = monthBounds(DateTime(2026, 2, 10));
+      expect(fmtRange(from, to), '1–28 fevral');
+    });
+
+    test('teskari berilgan sanalar almashtiriladi (hech qachon "9–3" chiqmaydi)', () {
+      expect(fmtRange(DateTime(2026, 8, 9), DateTime(2026, 8, 3)), '3–9 avgust');
+      expect(fmtRange(DateTime(2026, 8, 3), DateTime(2026, 7, 28)), '28 iyul – 3 avgust');
+    });
+
+    test('soat qiymati sarlavhaga ta\'sir qilmaydi', () {
+      expect(fmtRange(DateTime(2026, 8, 3, 7), DateTime(2026, 8, 9, 22)), '3–9 avgust');
+    });
+
+    test('barcha oy nomlari monthsUz bilan mos (kichik harfda)', () {
+      for (var m = 1; m <= 12; m++) {
+        final s = fmtRange(DateTime(2026, m, 1), DateTime(2026, m, 2));
+        expect(s, '1–2 ${monthsUz[m - 1].toLowerCase()}');
+      }
     });
   });
 }

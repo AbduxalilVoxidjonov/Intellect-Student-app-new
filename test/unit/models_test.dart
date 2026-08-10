@@ -1112,6 +1112,136 @@ void main() {
       expect(r.meSchoolRank, isNull);
       expect(r.schoolSize, 100);
     });
+
+    // -----------------------------------------------------------------------
+    // `groups` — o'quvchining HAR BIR faol guruhi alohida (podium shundan).
+    // -----------------------------------------------------------------------
+
+    test('groups o\'qiladi — har guruh o\'z o\'rni va o\'lchami bilan', () {
+      final r = StudentRating.fromJson(<String, dynamic>{
+        'meStudentId': 's1',
+        'classRows': <dynamic>[],
+        'groups': [
+          {
+            'groupId': 'g1',
+            'groupName': 'Ingliz tili A1',
+            'meRank': 2,
+            'size': 14,
+            'rows': [
+              {'rank': 1, 'studentId': 'x1', 'fullName': 'Aziza', 'className': 'A1', 'ball': 300},
+              {'rank': 2, 'studentId': 's1', 'fullName': 'Ali', 'className': 'A1', 'ball': 250},
+            ],
+          },
+          {
+            'groupId': 'g2',
+            'groupName': 'Matematika',
+            'meRank': 0,
+            'size': 3,
+            'rows': <dynamic>[],
+          },
+        ],
+      });
+      expect(r.groups, hasLength(2));
+      expect(r.groups[0].groupId, 'g1');
+      expect(r.groups[0].groupName, 'Ingliz tili A1');
+      expect(r.groups[0].meRank, 2);
+      expect(r.groups[0].size, 14);
+      expect(r.groups[0].rows, hasLength(2));
+      expect(r.groups[0].rows[1].studentId, 's1');
+      // Ro'yxatda yo'q bo'lsa meRank = 0 (null emas) — UI shunga qaraydi.
+      expect(r.groups[1].meRank, 0);
+      expect(r.groups[1].rows, isEmpty);
+    });
+
+    test('groups umuman yo\'q/null bo\'lsa bo\'sh ro\'yxat (null EMAS)', () {
+      // classRows ham bo'sh — fallback yasashga narsa yo'q.
+      final a = StudentRating.fromJson(const <String, dynamic>{});
+      expect(a.groups, isEmpty);
+      final b = StudentRating.fromJson(<String, dynamic>{'groups': null, 'classRows': <dynamic>[]});
+      expect(b.groups, isEmpty);
+      // Ro'yxat o'rniga obyekt kelsa ham qulamaydi.
+      final c = StudentRating.fromJson(<String, dynamic>{'groups': <String, dynamic>{}});
+      expect(c.groups, isEmpty);
+    });
+
+    test('ESKI server (groups yo\'q) — classRows dan bitta guruh yasaladi', () {
+      final r = StudentRating.fromJson(<String, dynamic>{
+        'meStudentId': 's1',
+        'classRows': [
+          {'rank': 1, 'studentId': 'x1', 'fullName': 'Aziza', 'className': 'A1', 'ball': 300},
+          {'rank': 2, 'studentId': 's1', 'fullName': 'Ali', 'className': 'A1', 'ball': 250},
+        ],
+      });
+      expect(r.groups, hasLength(1));
+      expect(r.groups.single.groupId, '', reason: 'soxta guruh — id yo\'q');
+      expect(r.groups.single.groupName, 'A1', reason: 'nom o\'z qatorimizdagi yorliqdan');
+      expect(r.groups.single.rows, hasLength(2));
+      expect(r.groups.single.meRank, 2);
+      expect(r.groups.single.size, 2);
+    });
+
+    test('ESKI server + o\'zim ro\'yxatda yo\'q — meRank 0, nom bo\'sh', () {
+      final r = StudentRating.fromJson(<String, dynamic>{
+        'meStudentId': 'yoq',
+        'classRows': [
+          {'rank': 1, 'studentId': 'x1', 'fullName': 'Aziza', 'className': 'A1', 'ball': 300},
+        ],
+      });
+      expect(r.groups.single.meRank, 0);
+      expect(r.groups.single.groupName, '');
+    });
+
+    test('groups kelsa classRows dan guruh YASALMAYDI (server manba)', () {
+      final r = StudentRating.fromJson(<String, dynamic>{
+        'meStudentId': 's1',
+        'classRows': [
+          {'rank': 1, 'studentId': 's1', 'fullName': 'Ali', 'className': 'A1'},
+        ],
+        'groups': [
+          {'groupId': 'g1', 'groupName': 'Ingliz', 'meRank': 1, 'size': 1, 'rows': <dynamic>[]},
+        ],
+      });
+      expect(r.groups, hasLength(1));
+      expect(r.groups.single.groupId, 'g1');
+      // ESKI maydon baribir o'z holicha qoladi (orqaga moslik).
+      expect(r.classRows, hasLength(1));
+    });
+
+    test('aylanma: fromJson(toJson()) qiymatni saqlaydi', () {
+      final src = StudentRating.fromJson(<String, dynamic>{
+        'meStudentId': 's1',
+        'classRows': [
+          {'rank': 1, 'studentId': 's1', 'fullName': 'Ali', 'className': 'A1', 'ball': 250},
+        ],
+        'schoolRows': [
+          {'rank': 9, 'studentId': 's1', 'fullName': 'Ali', 'className': 'A1', 'ball': 250},
+        ],
+        'meSchoolRank': 9,
+        'schoolSize': 300,
+        'groups': [
+          {
+            'groupId': 'g1',
+            'groupName': 'Ingliz tili A1',
+            'meRank': 1,
+            'size': 1,
+            'rows': [
+              {'rank': 1, 'studentId': 's1', 'fullName': 'Ali', 'className': 'A1', 'ball': 250},
+            ],
+          },
+        ],
+      });
+      expect(StudentRating.fromJson(src.toJson()), src);
+    });
+
+    test('RatingGroup — bo\'sh JSON qulamaydi', () {
+      final g = RatingGroup.fromJson(const <String, dynamic>{});
+      expect(g.groupId, '');
+      expect(g.groupName, '');
+      expect(g.rows, isEmpty);
+      expect(g.meRank, 0);
+      expect(g.size, 0);
+      expect(RatingGroup.fromJson(g.toJson()), g);
+    });
   });
 
   // =========================================================================
@@ -1838,6 +1968,254 @@ void main() {
           equals(StudentDashboard.fromJson(const <String, dynamic>{})));
       expect(StudentNotebook.fromJson(const <String, dynamic>{}).hashCode,
           StudentNotebook.fromJson(const <String, dynamic>{}).hashCode);
+    });
+  });
+
+  // =========================================================================
+  // DAVR JURNALI — GET /student/journal ("Umumiy statistika" ekrani)
+  // =========================================================================
+  group('StudentPeriodJournal (davr jurnali)', () {
+    // Backend shartnomasi bilan AYNAN bir xil javob (hujjatdagi namuna).
+    final Map<String, dynamic> journalJson = <String, dynamic>{
+      'from': '2026-08-03',
+      'to': '2026-08-09',
+      'groupId': '',
+      'groups': [
+        {'groupId': 'g1', 'groupName': 'Ingliz A1', 'courseName': 'General English', 'teacherName': 'Aziza'},
+      ],
+      'summary': {
+        'held': 12,
+        'attended': 10,
+        'absent': 1,
+        'late': 1,
+        'attendancePct': 83,
+        'gradesCount': 7,
+        'avgGrade': 4.6,
+        'homeworkDone': 5,
+        'homeworkMissed': 1,
+        'behaviorGood': 3,
+        'behaviorBad': 0,
+      },
+      'subjects': [
+        {
+          'subjectId': 'c1',
+          'subjectName': 'General English',
+          'held': 4,
+          'attended': 4,
+          'gradesCount': 3,
+          'avgGrade': 4.7,
+        },
+      ],
+      'lessons': [
+        {
+          'date': '2026-08-05',
+          'period': 2,
+          'groupId': 'g1',
+          'groupName': 'Ingliz A1',
+          'subjectId': 'c1',
+          'subjectName': 'General English',
+          'topic': 'Present Simple',
+          'homeworkText': 'Unit 3, ex. 4',
+          'conducted': true,
+          'present': true,
+          'grade': 5,
+          'reasonName': null,
+          'reasonShort': null,
+          'isLate': false,
+          'homeworkMark': 1,
+          'behavior': 0,
+          'mastery': null,
+        },
+      ],
+    };
+
+    void roundTrip<T>(T Function(Map<String, dynamic>) fromJson, T original) {
+      final encoded = (original as dynamic).toJson() as Map<String, dynamic>;
+      expect(fromJson(encoded), equals(original));
+      expect(fromJson(encoded).hashCode, original.hashCode);
+      // Haqiqiy matn orqali ham (offline kesh) o'tishi kerak.
+      final viaText = jsonDecode(jsonEncode(encoded)) as Map<String, dynamic>;
+      expect(fromJson(viaText), equals(original), reason: 'jsonEncode/jsonDecode orqali');
+    }
+
+    test('to\'liq JSON — barcha bo\'limlar o\'qiladi', () {
+      final j = StudentPeriodJournal.fromJson(journalJson);
+      expect(j.from, '2026-08-03');
+      expect(j.to, '2026-08-09');
+      expect(j.groupId, ''); // bo'sh = barcha guruhlar
+      expect(j.groups, hasLength(1));
+      expect(j.groups.single.groupName, 'Ingliz A1');
+      expect(j.groups.single.courseName, 'General English');
+      expect(j.groups.single.teacherName, 'Aziza');
+
+      expect(j.summary.held, 12);
+      expect(j.summary.attended, 10);
+      expect(j.summary.absent, 1);
+      expect(j.summary.late, 1);
+      expect(j.summary.attendancePct, 83);
+      expect(j.summary.gradesCount, 7);
+      expect(j.summary.avgGrade, 4.6);
+      expect(j.summary.homeworkDone, 5);
+      expect(j.summary.homeworkMissed, 1);
+      expect(j.summary.behaviorGood, 3);
+      expect(j.summary.behaviorBad, 0);
+
+      expect(j.subjects, hasLength(1));
+      expect(j.subjects.single.subjectId, 'c1');
+      expect(j.subjects.single.held, 4);
+      expect(j.subjects.single.attended, 4);
+      expect(j.subjects.single.gradesCount, 3);
+      expect(j.subjects.single.avgGrade, 4.7);
+
+      expect(j.lessons, hasLength(1));
+      final l = j.lessons.single;
+      expect(l.date, '2026-08-05');
+      expect(l.period, 2);
+      expect(l.groupId, 'g1');
+      expect(l.groupName, 'Ingliz A1');
+      expect(l.subjectName, 'General English');
+      expect(l.topic, 'Present Simple');
+      expect(l.homeworkText, 'Unit 3, ex. 4');
+      expect(l.conducted, isTrue);
+      expect(l.present, isTrue);
+      expect(l.grade, 5);
+      expect(l.reasonName, isNull);
+      expect(l.reasonShort, isNull);
+      expect(l.isLate, isFalse);
+      expect(l.homeworkMark, 1);
+      expect(l.behavior, 0);
+      expect(l.mastery, isNull);
+    });
+
+    test('bo\'sh JSON — hech narsa qulamaydi, hamma joyda 0 / bo\'sh ro\'yxat', () {
+      final j = StudentPeriodJournal.fromJson(const <String, dynamic>{});
+      expect(j.from, '');
+      expect(j.to, '');
+      expect(j.groupId, '');
+      expect(j.groups, isEmpty);
+      expect(j.subjects, isEmpty);
+      expect(j.lessons, isEmpty);
+      // `summary` umuman kelmasa ham obyekt bo'lishi kerak (null emas).
+      expect(j.summary.held, 0);
+      expect(j.summary.attendancePct, 0);
+      expect(j.summary.avgGrade, 0);
+    });
+
+    test('lessons massiv o\'rniga obyekt kelsa — bo\'sh ro\'yxat', () {
+      final j = StudentPeriodJournal.fromJson(<String, dynamic>{
+        ...journalJson,
+        'lessons': <String, dynamic>{'date': '2026-08-05'},
+        'subjects': 'xato',
+        'groups': null,
+      });
+      expect(j.lessons, isEmpty);
+      expect(j.subjects, isEmpty);
+      expect(j.groups, isEmpty);
+      // Qolgan bo'limlar buzilmaydi.
+      expect(j.summary.held, 12);
+    });
+
+    test('summary massiv/null bo\'lsa — nol qiymatli jamlanma', () {
+      final asList = StudentPeriodJournal.fromJson(<String, dynamic>{...journalJson, 'summary': <dynamic>[]});
+      expect(asList.summary.held, 0);
+      final asNull = StudentPeriodJournal.fromJson(<String, dynamic>{...journalJson, 'summary': null});
+      expect(asNull.summary.gradesCount, 0);
+      expect(asNull.lessons, hasLength(1)); // boshqa bo'limlar joyida
+    });
+
+    test('grade: null va grade: 0 FARQLANADI (baho qo\'yilmagan vs "0")', () {
+      Map<String, dynamic> lesson(Object? grade) => <String, dynamic>{
+            ...(journalJson['lessons'] as List).first as Map<String, dynamic>,
+            'grade': grade,
+          };
+      expect(StudentLessonRow.fromJson(lesson(null)).grade, isNull);
+      expect(StudentLessonRow.fromJson(lesson(0)).grade, 0);
+      // Maydon umuman bo'lmasa ham null (0 ga aylanib ketmasin).
+      final noKey = <String, dynamic>{...lesson(null)}..remove('grade');
+      expect(StudentLessonRow.fromJson(noKey).grade, isNull);
+    });
+
+    test('mastery ham nullable (0 = "reaktiv emas" degani, "belgilanmagan" emas)', () {
+      expect(StudentLessonRow.fromJson(const <String, dynamic>{}).mastery, isNull);
+      expect(StudentLessonRow.fromJson(<String, dynamic>{'mastery': 0}).mastery, 0);
+      expect(StudentLessonRow.fromJson(<String, dynamic>{'mastery': 3}).mastery, 3);
+    });
+
+    test('noto\'g\'ri tiplar — matn son, son matn, obyekt', () {
+      final s = StudentPeriodSummary.fromJson(<String, dynamic>{
+        'held': '12', // matn son
+        'attended': 10.4, // kasr → yaxlitlanadi
+        'absent': true, // bool → 1
+        'late': <String, dynamic>{}, // obyekt → 0
+        'attendancePct': '83.4',
+        'gradesCount': null,
+        'avgGrade': '4,6', // vergulli kasr
+      });
+      expect(s.held, 12);
+      expect(s.attended, 10);
+      expect(s.absent, 1);
+      expect(s.late, 0);
+      expect(s.attendancePct, 83);
+      expect(s.gradesCount, 0);
+      expect(s.avgGrade, 4.6);
+
+      final l = StudentLessonRow.fromJson(<String, dynamic>{
+        'date': 20260805, // son → matn
+        'period': '2',
+        'conducted': 1, // tinyint
+        'present': 'true',
+        'grade': 'yo\'q', // son emas → null
+        'reasonName': 5, // son → matn
+        'homeworkMark': 'x', // son emas → 0
+      });
+      expect(l.date, '20260805');
+      expect(l.period, 2);
+      expect(l.conducted, isTrue);
+      expect(l.present, isTrue);
+      expect(l.grade, isNull);
+      expect(l.reasonName, '5');
+      expect(l.homeworkMark, 0);
+    });
+
+    test('sababli yo\'qlik qatori (kelmagan + kechikkan)', () {
+      final l = StudentLessonRow.fromJson(<String, dynamic>{
+        'date': '2026-08-06',
+        'period': 1,
+        'conducted': true,
+        'present': false,
+        'reasonName': 'Kasal',
+        'reasonShort': 'K',
+        'isLate': true,
+      });
+      expect(l.present, isFalse);
+      expect(l.reasonName, 'Kasal');
+      expect(l.reasonShort, 'K');
+      expect(l.isLate, isTrue);
+    });
+
+    test('round-trip: to\'liq javob, bo\'sh javob va nullable maydonlar', () {
+      roundTrip(StudentPeriodJournal.fromJson, StudentPeriodJournal.fromJson(journalJson));
+      roundTrip(StudentPeriodJournal.fromJson, StudentPeriodJournal.fromJson(const <String, dynamic>{}));
+      roundTrip(StudentPeriodSummary.fromJson, StudentPeriodSummary.fromJson(const <String, dynamic>{}));
+      roundTrip(StudentSubjectStat.fromJson, StudentSubjectStat.fromJson(const <String, dynamic>{}));
+      roundTrip(StudentPeriodGroup.fromJson, StudentPeriodGroup.fromJson(const <String, dynamic>{}));
+      // `grade`/`mastery` null holati keshdan qaytganda ham null bo'lib qolishi kerak.
+      final blank = StudentLessonRow.fromJson(const <String, dynamic>{});
+      roundTrip(StudentLessonRow.fromJson, blank);
+      expect(StudentLessonRow.fromJson(blank.toJson()).grade, isNull);
+      expect(StudentLessonRow.fromJson(blank.toJson()).mastery, isNull);
+    });
+
+    test('tenglik: bir xil JSON → teng obyekt, bitta dars farqi ko\'tariladi', () {
+      final a = StudentPeriodJournal.fromJson(journalJson);
+      final b = StudentPeriodJournal.fromJson(journalJson);
+      expect(a, equals(b));
+      expect(a.hashCode, b.hashCode);
+
+      final changed = jsonDecode(jsonEncode(journalJson)) as Map<String, dynamic>;
+      ((changed['lessons'] as List).first as Map<String, dynamic>)['grade'] = 4;
+      expect(a, isNot(equals(StudentPeriodJournal.fromJson(changed))));
+      expect(<StudentPeriodJournal>{a, b, StudentPeriodJournal.fromJson(changed)}, hasLength(2));
     });
   });
 }

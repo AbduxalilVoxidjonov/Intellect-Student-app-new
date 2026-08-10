@@ -8,14 +8,30 @@ class ApiClient {
   static String? token;
   static VoidCallback? onUnauthorized;
 
+  /// YUZ TASDIQLASH TALAB QILINDI — server 401 bilan `{"faceRequired":true}`
+  /// qaytardi. Bu sessiya TUGAGANI EMAS: token yaroqli, lekin CHEKLANGAN
+  /// (faqat `/student/face/*`). Foydalanuvchi selfi ekraniga qaytariladi.
+  static VoidCallback? onFaceRequired;
+
   /// 401 DEDUBLIKATSIYASI: bir vaqtda ketgan N ta so'rov N marta 401 qaytaradi.
   /// Har biri uchun `onUnauthorized` chaqirilsa — N marta logout (va N marta
   /// ekran almashishi) bo'lardi. Sessiya bir marta tugatiladi; keyingi
   /// muvaffaqiyatli login bayroqni tiklaydi.
   static bool _unauthorizedFired = false;
 
-  /// Bayroqni tiklaydi — muvaffaqiyatli login'dan keyin (va testlar orasida).
-  static void resetUnauthorizedGuard() => _unauthorizedFired = false;
+  /// Yuz talabi uchun ALOHIDA bayroq — logout bayrog'i bilan aralashtirilsa,
+  /// selfi ekraniga qaytish bir marta ishlab, keyin sessiya tugatilardi.
+  static bool _faceRequiredFired = false;
+
+  /// Bayroqlarni tiklaydi — muvaffaqiyatli login'dan keyin (va testlar orasida).
+  static void resetUnauthorizedGuard() {
+    _unauthorizedFired = false;
+    _faceRequiredFired = false;
+  }
+
+  /// Javob tanasida `faceRequired: true` bormi (401 ning SABABI shu).
+  static bool isFaceRequired(Object? data) =>
+      data is Map && data['faceRequired'] == true;
 
   static final Dio dio = _build();
 
@@ -44,6 +60,16 @@ class ApiClient {
         if (isLogin && code >= 200 && code < 300) {
           // Yangi sessiya boshlandi — keyingi 401 yana ushlanishi kerak.
           _unauthorizedFired = false;
+          _faceRequiredFired = false;
+        } else if (code == 401 && !isLogin && isFaceRequired(response.data)) {
+          // Token YAROQLI, faqat cheklangan — LOGOUT QILMAYMIZ (aks holda
+          // foydalanuvchi selfi o'rniga login ekraniga tushib, parolini
+          // qaytadan kiritishga majbur bo'lardi).
+          final cb = onFaceRequired;
+          if (cb != null && !_faceRequiredFired) {
+            _faceRequiredFired = true;
+            cb();
+          }
         } else if (code == 401 && !isLogin && !_unauthorizedFired) {
           final cb = onUnauthorized;
           // Bayroq FAQAT haqiqatan chaqirilganda yoqiladi — aks holda ilova

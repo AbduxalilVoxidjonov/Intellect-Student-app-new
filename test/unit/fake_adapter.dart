@@ -79,6 +79,7 @@ class FakeAdapter implements HttpClientAdapter {
 void resetApiClient() {
   ApiClient.token = null;
   ApiClient.onUnauthorized = null;
+  ApiClient.onFaceRequired = null;
   // 401 dedublikatsiya bayrog'i ham STATIK — tozalanmasa keyingi testda
   // `onUnauthorized` umuman chaqirilmay qolardi.
   ApiClient.resetUnauthorizedGuard();

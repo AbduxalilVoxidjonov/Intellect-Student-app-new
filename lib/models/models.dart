@@ -1014,12 +1014,82 @@ class RatingRow {
       ]);
 }
 
+/// O'quvchining BITTA guruhi bo'yicha reyting (server `PortalRatingGroupDto`).
+///
+/// NEGA ALOHIDA: loyihada bir o'quvchi bir necha kursda (guruhda) o'qishi odatiy
+/// hol, shuning uchun "guruh reytingi" bitta ro'yxat emas — har guruh o'z
+/// ro'yxati va o'z o'rni bilan keladi. Ichkaridagi `rank` guruh ICHIDA qayta
+/// raqamlangan (1,2,3...) — podium shunga tayanadi.
+class RatingGroup {
+  /// Guruh id'si. Faol a'zoligi yo'q (eski) o'quvchida server bo'sh satr
+  /// qaytaradi va `groupName` eski `ClassName` yorlig'i bo'ladi.
+  final String groupId;
+  final String groupName;
+  final List<RatingRow> rows;
+
+  /// O'quvchining shu guruhdagi o'rni; 0 — ro'yxatda yo'q.
+  final int meRank;
+
+  /// Guruhdagi jami o'quvchi (odatda `rows.length`, lekin serverdan keladi).
+  final int size;
+
+  RatingGroup({
+    required this.groupId,
+    required this.groupName,
+    required this.rows,
+    required this.meRank,
+    required this.size,
+  });
+
+  factory RatingGroup.fromJson(Map<String, dynamic> j) => RatingGroup(
+        groupId: _s(j['groupId']),
+        groupName: _s(j['groupName']),
+        rows: _list(j['rows'], RatingRow.fromJson),
+        meRank: _i(j['meRank']),
+        size: _i(j['size']),
+      );
+
+  /// `RatingGroup.fromJson(x.toJson())` — qiymatni saqlaydigan aylanma (offline kesh uchun).
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'groupId': groupId,
+        'groupName': groupName,
+        'rows': rows.map((e) => e.toJson()).toList(),
+        'meRank': meRank,
+        'size': size,
+      };
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is RatingGroup &&
+          groupId == other.groupId &&
+          groupName == other.groupName &&
+          _deepEq(rows, other.rows) &&
+          meRank == other.meRank &&
+          size == other.size;
+
+  @override
+  int get hashCode => _hashProps(<Object?>[
+        groupId,
+        groupName,
+        rows,
+        meRank,
+        size,
+      ]);
+}
+
 class StudentRating {
   final String meStudentId;
+
+  /// ESKI maydon — server uni birinchi guruh qatorlari bilan to'ldiradi
+  /// (orqaga moslik). Yangi kod `groups` dan foydalanadi.
   final List<RatingRow> classRows;
   final List<RatingRow> schoolRows;
   final int? meSchoolRank;
   final int schoolSize;
+
+  /// HAR BIR faol guruh alohida. HECH QACHON null emas (bo'sh bo'lishi mumkin).
+  final List<RatingGroup> groups;
 
   StudentRating({
     required this.meStudentId,
@@ -1027,15 +1097,38 @@ class StudentRating {
     required this.schoolRows,
     this.meSchoolRank,
     required this.schoolSize,
+    this.groups = const <RatingGroup>[],
   });
 
-  factory StudentRating.fromJson(Map<String, dynamic> j) => StudentRating(
-        meStudentId: _s(j['meStudentId']),
-        classRows: _list(j['classRows'], RatingRow.fromJson),
-        schoolRows: _list(j['schoolRows'], RatingRow.fromJson),
-        meSchoolRank: _in(j['meSchoolRank']),
-        schoolSize: _i(j['schoolSize']),
-      );
+  factory StudentRating.fromJson(Map<String, dynamic> j) {
+    final classRows = _list(j['classRows'], RatingRow.fromJson);
+    var groups = _list(j['groups'], RatingGroup.fromJson);
+    // ESKI SERVER (`groups` yubormaydi) bilan ham ishlash uchun: mavjud
+    // `classRows` dan bitta guruh yasaymiz — aks holda "Guruh" rejimi bo'sh
+    // qolib, ilova eski backendda ishlamay qolardi.
+    if (groups.isEmpty && classRows.isNotEmpty) {
+      final meId = _s(j['meStudentId']);
+      final meIdx = classRows.indexWhere((r) => r.studentId == meId);
+      groups = <RatingGroup>[
+        RatingGroup(
+          groupId: '',
+          // Nom serverdan kelmaydi — o'z qatorimizdagi yorliqni olamiz.
+          groupName: meIdx >= 0 ? classRows[meIdx].className : '',
+          rows: classRows,
+          meRank: meIdx >= 0 ? classRows[meIdx].rank : 0,
+          size: classRows.length,
+        ),
+      ];
+    }
+    return StudentRating(
+      meStudentId: _s(j['meStudentId']),
+      classRows: classRows,
+      schoolRows: _list(j['schoolRows'], RatingRow.fromJson),
+      meSchoolRank: _in(j['meSchoolRank']),
+      schoolSize: _i(j['schoolSize']),
+      groups: groups,
+    );
+  }
 
   /// `StudentRating.fromJson(x.toJson())` — qiymatni saqlaydigan aylanma (offline kesh uchun).
   Map<String, dynamic> toJson() => <String, dynamic>{
@@ -1044,6 +1137,7 @@ class StudentRating {
         'schoolRows': schoolRows.map((e) => e.toJson()).toList(),
         'meSchoolRank': meSchoolRank,
         'schoolSize': schoolSize,
+        'groups': groups.map((e) => e.toJson()).toList(),
       };
 
   @override
@@ -1054,7 +1148,8 @@ class StudentRating {
           _deepEq(classRows, other.classRows) &&
           _deepEq(schoolRows, other.schoolRows) &&
           meSchoolRank == other.meSchoolRank &&
-          schoolSize == other.schoolSize;
+          schoolSize == other.schoolSize &&
+          _deepEq(groups, other.groups);
 
   @override
   int get hashCode => _hashProps(<Object?>[
@@ -1063,6 +1158,7 @@ class StudentRating {
         schoolRows,
         meSchoolRank,
         schoolSize,
+        groups,
       ]);
 }
 
@@ -3851,5 +3947,429 @@ class ContractDoc {
         delivered,
         status,
         visible,
+      ]);
+}
+
+// ---------- DAVR JURNALI ("Umumiy statistika" ekrani) ----------
+//
+// `GET /student/journal?from=&to=&groupId=` — HAFTA yoki OY oralig'idagi butun
+// manzara BITTA javobda: jamlanma (davomat/baho/uy vazifasi/xulq), fanlar kesimi
+// va HAR DARS uchun alohida qator. Ilgari bu ma'lumot uchta ekranga (Baholar,
+// Davomat, Baholash) bo'lingan va uchta so'rov ketardi.
+//
+// DIQQAT (uslub): bu fayldagi boshqa DTO'lar kabi konstruktorlar `const` EMAS —
+// `flutter_lints` dagi `prefer_const_constructors` chaqiruv joylarida (ekran/test)
+// ortiqcha ogohlantirish berardi, model esa baribir o'zgarmas (barcha maydon `final`).
+
+/// Javobdagi guruh elementi — davr ichida o'quvchi qatnashgan guruhlar (filtr ro'yxati).
+///
+/// MAVJUD `StudentGroupInfo` ATAYIN QAYTA ISHLATILMADI: u boshqa endpointning
+/// (`/student/groups`) boshqa shakli — nom `name` kalitida, ustiga `days`,
+/// `state`, `joinedAt` kabi o'nlab maydon bor. Uni shu javobga qo'llasak
+/// `groupName` umuman o'qilmay, guruh nomi bo'sh bo'lib chiqardi.
+class StudentPeriodGroup {
+  final String groupId;
+  final String groupName;
+  final String courseName;
+  final String teacherName;
+
+  StudentPeriodGroup({
+    required this.groupId,
+    required this.groupName,
+    required this.courseName,
+    required this.teacherName,
+  });
+
+  factory StudentPeriodGroup.fromJson(Map<String, dynamic> j) => StudentPeriodGroup(
+        groupId: _s(j['groupId']),
+        groupName: _s(j['groupName']),
+        courseName: _s(j['courseName']),
+        teacherName: _s(j['teacherName']),
+      );
+
+  /// `StudentPeriodGroup.fromJson(x.toJson())` — qiymatni saqlaydigan aylanma (offline kesh uchun).
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'groupId': groupId,
+        'groupName': groupName,
+        'courseName': courseName,
+        'teacherName': teacherName,
+      };
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is StudentPeriodGroup &&
+          groupId == other.groupId &&
+          groupName == other.groupName &&
+          courseName == other.courseName &&
+          teacherName == other.teacherName;
+
+  @override
+  int get hashCode => _hashProps(<Object?>[
+        groupId,
+        groupName,
+        courseName,
+        teacherName,
+      ]);
+}
+
+/// Davr jamlanmasi — ekran tepasidagi kartochkalar.
+///
+/// `attendancePct` — SERVER hisoblagan foiz (butun son). Ilova uni qayta
+/// hisoblamaydi: "o'tilgan dars" tushunchasi (a'zolik boshlanishi, muzlatilgan
+/// kunlar) faqat serverda to'liq ma'lum.
+class StudentPeriodSummary {
+  /// O'tilgan darslar soni.
+  final int held;
+  final int attended;
+  final int absent;
+  final int late;
+  /// Davomat foizi (0-100), server hisoblagan.
+  final int attendancePct;
+  /// Qo'yilgan baholar soni (o'rtacha shundan chiqadi).
+  final int gradesCount;
+  /// O'rtacha baho. Baho umuman bo'lmasa 0 keladi — ekran `gradesCount == 0`
+  /// bo'yicha "—" ko'rsatsin (0 ni "ikki" deb ko'rsatish noto'g'ri bo'lardi).
+  final double avgGrade;
+  final int homeworkDone;
+  final int homeworkMissed;
+  final int behaviorGood;
+  final int behaviorBad;
+
+  StudentPeriodSummary({
+    required this.held,
+    required this.attended,
+    required this.absent,
+    required this.late,
+    required this.attendancePct,
+    required this.gradesCount,
+    required this.avgGrade,
+    required this.homeworkDone,
+    required this.homeworkMissed,
+    required this.behaviorGood,
+    required this.behaviorBad,
+  });
+
+  factory StudentPeriodSummary.fromJson(Map<String, dynamic> j) => StudentPeriodSummary(
+        held: _i(j['held']),
+        attended: _i(j['attended']),
+        absent: _i(j['absent']),
+        late: _i(j['late']),
+        attendancePct: _i(j['attendancePct']),
+        gradesCount: _i(j['gradesCount']),
+        avgGrade: _d(j['avgGrade']),
+        homeworkDone: _i(j['homeworkDone']),
+        homeworkMissed: _i(j['homeworkMissed']),
+        behaviorGood: _i(j['behaviorGood']),
+        behaviorBad: _i(j['behaviorBad']),
+      );
+
+  /// `StudentPeriodSummary.fromJson(x.toJson())` — qiymatni saqlaydigan aylanma (offline kesh uchun).
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'held': held,
+        'attended': attended,
+        'absent': absent,
+        'late': late,
+        'attendancePct': attendancePct,
+        'gradesCount': gradesCount,
+        'avgGrade': avgGrade,
+        'homeworkDone': homeworkDone,
+        'homeworkMissed': homeworkMissed,
+        'behaviorGood': behaviorGood,
+        'behaviorBad': behaviorBad,
+      };
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is StudentPeriodSummary &&
+          held == other.held &&
+          attended == other.attended &&
+          absent == other.absent &&
+          late == other.late &&
+          attendancePct == other.attendancePct &&
+          gradesCount == other.gradesCount &&
+          avgGrade == other.avgGrade &&
+          homeworkDone == other.homeworkDone &&
+          homeworkMissed == other.homeworkMissed &&
+          behaviorGood == other.behaviorGood &&
+          behaviorBad == other.behaviorBad;
+
+  @override
+  int get hashCode => _hashProps(<Object?>[
+        held,
+        attended,
+        absent,
+        late,
+        attendancePct,
+        gradesCount,
+        avgGrade,
+        homeworkDone,
+        homeworkMissed,
+        behaviorGood,
+        behaviorBad,
+      ]);
+}
+
+/// Fan (kurs) kesimi — davr ichida qaysi fandan qancha dars va qanday baho.
+class StudentSubjectStat {
+  final String subjectId;
+  final String subjectName;
+  final int held;
+  final int attended;
+  final int gradesCount;
+  /// Shu fan bo'yicha o'rtacha baho (`gradesCount == 0` bo'lsa 0 — "—" deb ko'rsatiladi).
+  final double avgGrade;
+
+  StudentSubjectStat({
+    required this.subjectId,
+    required this.subjectName,
+    required this.held,
+    required this.attended,
+    required this.gradesCount,
+    required this.avgGrade,
+  });
+
+  factory StudentSubjectStat.fromJson(Map<String, dynamic> j) => StudentSubjectStat(
+        subjectId: _s(j['subjectId']),
+        subjectName: _s(j['subjectName']),
+        held: _i(j['held']),
+        attended: _i(j['attended']),
+        gradesCount: _i(j['gradesCount']),
+        avgGrade: _d(j['avgGrade']),
+      );
+
+  /// `StudentSubjectStat.fromJson(x.toJson())` — qiymatni saqlaydigan aylanma (offline kesh uchun).
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'subjectId': subjectId,
+        'subjectName': subjectName,
+        'held': held,
+        'attended': attended,
+        'gradesCount': gradesCount,
+        'avgGrade': avgGrade,
+      };
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is StudentSubjectStat &&
+          subjectId == other.subjectId &&
+          subjectName == other.subjectName &&
+          held == other.held &&
+          attended == other.attended &&
+          gradesCount == other.gradesCount &&
+          avgGrade == other.avgGrade;
+
+  @override
+  int get hashCode => _hashProps(<Object?>[
+        subjectId,
+        subjectName,
+        held,
+        attended,
+        gradesCount,
+        avgGrade,
+      ]);
+}
+
+/// BITTA DARS qatori — o'quvchi shu darsda nima olganini ko'radi.
+///
+/// `grade` va `mastery` ATAYIN nullable: o'qituvchi har darsga baho qo'ymaydi.
+/// `0` bilan almashtirilsa dars "nol baho olingan" bo'lib ko'rinardi.
+/// `homeworkMark`: 0 = belgilanmagan, 1 = qildi, 2 = qilmadi, 3 = chala.
+/// `behavior`: 0 = belgilanmagan, 1 = yaxshi, 2 = yomon.
+/// `mastery` (o'zlashtirish): 0 = reaktiv emas … 3 = proaktiv.
+class StudentLessonRow {
+  final String date;
+  /// Dars raqami — bir kunda bir necha dars bo'lsa farqlash uchun.
+  final int period;
+  final String groupId;
+  final String groupName;
+  final String subjectId;
+  final String subjectName;
+  final String topic;
+  final String homeworkText;
+  final bool conducted;
+  final bool present;
+  final int? grade;
+  /// Sababli yo'qlik nomi (bo'lmasa null) — davomat izohi.
+  final String? reasonName;
+  final String? reasonShort;
+  final bool isLate;
+  final int homeworkMark;
+  final int behavior;
+  final int? mastery;
+
+  StudentLessonRow({
+    required this.date,
+    required this.period,
+    required this.groupId,
+    required this.groupName,
+    required this.subjectId,
+    required this.subjectName,
+    required this.topic,
+    required this.homeworkText,
+    required this.conducted,
+    required this.present,
+    required this.isLate,
+    required this.homeworkMark,
+    required this.behavior,
+    this.grade,
+    this.reasonName,
+    this.reasonShort,
+    this.mastery,
+  });
+
+  factory StudentLessonRow.fromJson(Map<String, dynamic> j) => StudentLessonRow(
+        date: _s(j['date']),
+        period: _i(j['period']),
+        groupId: _s(j['groupId']),
+        groupName: _s(j['groupName']),
+        subjectId: _s(j['subjectId']),
+        subjectName: _s(j['subjectName']),
+        topic: _s(j['topic']),
+        homeworkText: _s(j['homeworkText']),
+        conducted: _b(j['conducted']),
+        present: _b(j['present']),
+        isLate: _b(j['isLate']),
+        homeworkMark: _i(j['homeworkMark']),
+        behavior: _i(j['behavior']),
+        grade: _in(j['grade']),
+        reasonName: _sn(j['reasonName']),
+        reasonShort: _sn(j['reasonShort']),
+        mastery: _in(j['mastery']),
+      );
+
+  /// `StudentLessonRow.fromJson(x.toJson())` — qiymatni saqlaydigan aylanma (offline kesh uchun).
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'date': date,
+        'period': period,
+        'groupId': groupId,
+        'groupName': groupName,
+        'subjectId': subjectId,
+        'subjectName': subjectName,
+        'topic': topic,
+        'homeworkText': homeworkText,
+        'conducted': conducted,
+        'present': present,
+        'grade': grade,
+        'reasonName': reasonName,
+        'reasonShort': reasonShort,
+        'isLate': isLate,
+        'homeworkMark': homeworkMark,
+        'behavior': behavior,
+        'mastery': mastery,
+      };
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is StudentLessonRow &&
+          date == other.date &&
+          period == other.period &&
+          groupId == other.groupId &&
+          groupName == other.groupName &&
+          subjectId == other.subjectId &&
+          subjectName == other.subjectName &&
+          topic == other.topic &&
+          homeworkText == other.homeworkText &&
+          conducted == other.conducted &&
+          present == other.present &&
+          grade == other.grade &&
+          reasonName == other.reasonName &&
+          reasonShort == other.reasonShort &&
+          isLate == other.isLate &&
+          homeworkMark == other.homeworkMark &&
+          behavior == other.behavior &&
+          mastery == other.mastery;
+
+  @override
+  int get hashCode => _hashProps(<Object?>[
+        date,
+        period,
+        groupId,
+        groupName,
+        subjectId,
+        subjectName,
+        topic,
+        homeworkText,
+        conducted,
+        present,
+        grade,
+        reasonName,
+        reasonShort,
+        isLate,
+        homeworkMark,
+        behavior,
+        mastery,
+      ]);
+}
+
+/// Davr jurnalining TO'LIQ javobi (`GET /student/journal`).
+///
+/// `groupId` — so'rovda qo'llangan filtr (bo'sh satr = barcha guruhlar).
+/// U javobda qaytadi, chunki ekran "hozir qaysi guruh tanlangan"ni serverdan
+/// tasdiqlab oladi (server filtri o'z ixtiyori bilan boshqa guruhga tushishi mumkin).
+class StudentPeriodJournal {
+  final String from;
+  final String to;
+  final String groupId;
+  final List<StudentPeriodGroup> groups;
+  final StudentPeriodSummary summary;
+  final List<StudentSubjectStat> subjects;
+  final List<StudentLessonRow> lessons;
+
+  StudentPeriodJournal({
+    required this.from,
+    required this.to,
+    required this.groupId,
+    required this.groups,
+    required this.summary,
+    required this.subjects,
+    required this.lessons,
+  });
+
+  factory StudentPeriodJournal.fromJson(Map<String, dynamic> j) => StudentPeriodJournal(
+        from: _s(j['from']),
+        to: _s(j['to']),
+        groupId: _s(j['groupId']),
+        groups: _list(j['groups'], StudentPeriodGroup.fromJson),
+        // `summary` umuman kelmasa ham ekran ochilsin — `_map` bo'sh map beradi.
+        summary: StudentPeriodSummary.fromJson(_map(j['summary'])),
+        subjects: _list(j['subjects'], StudentSubjectStat.fromJson),
+        lessons: _list(j['lessons'], StudentLessonRow.fromJson),
+      );
+
+  /// `StudentPeriodJournal.fromJson(x.toJson())` — qiymatni saqlaydigan aylanma (offline kesh uchun).
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'from': from,
+        'to': to,
+        'groupId': groupId,
+        'groups': groups.map((e) => e.toJson()).toList(),
+        'summary': summary.toJson(),
+        'subjects': subjects.map((e) => e.toJson()).toList(),
+        'lessons': lessons.map((e) => e.toJson()).toList(),
+      };
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is StudentPeriodJournal &&
+          from == other.from &&
+          to == other.to &&
+          groupId == other.groupId &&
+          _deepEq(groups, other.groups) &&
+          summary == other.summary &&
+          _deepEq(subjects, other.subjects) &&
+          _deepEq(lessons, other.lessons);
+
+  @override
+  int get hashCode => _hashProps(<Object?>[
+        from,
+        to,
+        groupId,
+        groups,
+        summary,
+        subjects,
+        lessons,
       ]);
 }

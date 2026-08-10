@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../api/api_client.dart';
 import '../utils/errors.dart';
+import 'device_identity.dart';
 import 'push.dart';
 
 /// Foydalanuvchi sessiyasi + tema. Ilovaning tepasida `ChangeNotifierProvider` bilan beriladi.
@@ -10,17 +11,33 @@ class Session extends ChangeNotifier {
   static const _kToken = 'token';
   static const _kUser = 'user';
   static const _kTheme = 'student_theme';
+  static const _kFaceRequired = 'face_required';
+  static const _kFaceStatus = 'face_status';
 
   String? _token;
   Map<String, dynamic>? _user;
   bool _dark = false;
   bool _ready = false;
+  bool _faceRequired = false;
+  String? _faceStatus;
 
   String? get token => _token;
   Map<String, dynamic>? get user => _user;
   bool get isAuthed => _token != null;
   bool get isDark => _dark;
   bool get ready => _ready;
+
+  /// YUZ TASDIQLASH KUTILMOQDA — token bor, lekin u CHEKLANGAN (15 daqiqa,
+  /// faqat `/student/face/*`). Ilova qobiq (Shell) o'rniga selfi ekranini
+  /// ko'rsatadi.
+  ///
+  /// ⚠️ Bu holat DISKKA yoziladi: foydalanuvchi tekshiruv o'rtasida ilovani
+  /// yopsa, qayta ochilganda yana selfi ekrani chiqishi kerak. Aks holda
+  /// cheklangan token bilan qobiq ochilar va HAR BIR so'rov 401 bo'lardi.
+  bool get faceRequired => _faceRequired;
+
+  /// `enroll` — etalon hali yo'q (profil rasmidan olinadi), `verify` — bor.
+  String? get faceStatus => _faceStatus;
 
   /// `user` maydonini XAVFSIZ o'qiydi: `as String?` cast'i turi mos kelmasa
   /// `TypeError` (Error!) berardi va bu getterlar `build()` ichidan chaqilgani
@@ -79,9 +96,14 @@ class Session extends ChangeNotifier {
       await p.remove(_kToken);
       await p.remove(_kUser);
     }
+    if (_token != null) {
+      _faceRequired = p.getBool(_kFaceRequired) ?? false;
+      _faceStatus = p.getString(_kFaceStatus);
+    }
     _dark = p.getString(_kTheme) == 'dark';
     ApiClient.token = _token;
     ApiClient.onUnauthorized = _onUnauthorized;
+    ApiClient.onFaceRequired = _onFaceRequired;
     _ready = true;
     notifyListeners();
   }
@@ -91,6 +113,11 @@ class Session extends ChangeNotifier {
       final res = await ApiClient.dio.post('/auth/login', data: {
         'email': email.trim(),
         'password': password,
+        // QURILMA — server "bu telefonda ilgari kirilganmi" ni shundan biladi.
+        // Yuborilmasa yuz tekshiruvi UMUMAN so'ralmaydi (server eski
+        // ilovalarni shu tarzda ajratadi), ya'ni bu maydonlar himoyaning
+        // ishlashi uchun SHART.
+        ...await DeviceIdentity.fields(),
       });
       if (!ApiClient.ok(res)) {
         return ApiClient.errorMessage(res, "Login yoki parol noto'g'ri");
@@ -112,7 +139,16 @@ class Session extends ChangeNotifier {
       if (!_roleAllowed(user?['role'])) {
         return 'Bu ilova faqat o\'quvchilar uchun';
       }
-      await _persist(token, user);
+      // Yangi qurilma — server CHEKLANGAN token berdi va selfi kutmoqda.
+      // `faceRequired` kelmasa (eski server) hammasi avvalgidek ishlaydi.
+      final needFace = data['faceRequired'] == true;
+      final faceStatus = data['faceStatus'];
+      await _persist(
+        token,
+        user,
+        faceRequired: needFace,
+        faceStatus: needFace ? (faceStatus is String ? faceStatus : null) : null,
+      );
       return null; // muvaffaqiyat
     } catch (e) {
       // `on Exception` EMAS: `Error` turidagi xatolar ham ushlansin va foydalanuvchi
@@ -121,9 +157,35 @@ class Session extends ChangeNotifier {
     }
   }
 
-  Future<void> _persist(String token, Map<String, dynamic>? user) async {
+  /// Yuz tekshiruvi MUVAFFAQIYATLI tugadi — server TO'LIQ token berdi.
+  /// Shundan keyin ilova odatdagidek ochiladi.
+  Future<void> completeFace(String token) async {
+    await _persist(token, _user);
+  }
+
+  /// Cheklangan token bilan boshqa endpointga so'rov ketdi (401 `faceRequired`).
+  /// Sessiya TUGATILMAYDI — foydalanuvchi selfi ekraniga qaytariladi.
+  void _onFaceRequired() {
+    if (_faceRequired || _token == null) return;
+    _faceRequired = true;
+    notifyListeners();
+    // Diskka yozish fon rejimida — bu yerda kutib turishning ma'nosi yo'q
+    // (ekran allaqachon almashishi kerak).
+    SharedPreferences.getInstance()
+        .then((p) => p.setBool(_kFaceRequired, true))
+        .catchError((Object _) => false);
+  }
+
+  Future<void> _persist(
+    String token,
+    Map<String, dynamic>? user, {
+    bool faceRequired = false,
+    String? faceStatus,
+  }) async {
     _token = token;
     _user = user;
+    _faceRequired = faceRequired;
+    _faceStatus = faceStatus;
     ApiClient.token = token;
     // Yangi sessiya — 401 qorovulini tiklaymiz, aks holda oldingi sessiyada
     // ishlagan dedublikatsiya bayrog'i keyingi 401 ni "yeb" qo'yardi.
@@ -136,6 +198,17 @@ class Session extends ChangeNotifier {
       // MUHIM: `user` kelmasa eski yozuvni O'CHIRAMIZ. Aks holda diskda yangi
       // token + oldingi foydalanuvchining ismi/id'si qolib ketardi.
       await p.remove(_kUser);
+    }
+    if (faceRequired) {
+      await p.setBool(_kFaceRequired, true);
+      if (faceStatus != null) {
+        await p.setString(_kFaceStatus, faceStatus);
+      } else {
+        await p.remove(_kFaceStatus);
+      }
+    } else {
+      await p.remove(_kFaceRequired);
+      await p.remove(_kFaceStatus);
     }
     notifyListeners();
   }
@@ -161,10 +234,17 @@ class Session extends ChangeNotifier {
     await PushService.stop(revoke: revokeDevice);
     _token = null;
     _user = null;
+    _faceRequired = false;
+    _faceStatus = null;
     ApiClient.token = null;
     final p = await SharedPreferences.getInstance();
     await p.remove(_kToken);
     await p.remove(_kUser);
+    await p.remove(_kFaceRequired);
+    await p.remove(_kFaceStatus);
+    // ⚠️ `device_id` O'CHIRILMAYDI — u qurilmaning identifikatori, sessiyaniki
+    // emas. Har chiqishda yangilansa, har kirishda yangi qurilma deb selfi
+    // so'ralaverardi.
     notifyListeners();
   }
 

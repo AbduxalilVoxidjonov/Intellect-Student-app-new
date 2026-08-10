@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'services/push.dart';
 import 'services/session.dart';
 import 'theme/app_theme.dart';
+import 'screens/face_check_screen.dart';
 import 'screens/login_screen.dart';
 import 'screens/shell.dart';
 
@@ -32,9 +33,14 @@ class StudentApp extends StatelessWidget {
       // AppTheme'ni Navigator ustida joylashtiramiz — barcha push qilingan
       // sub-screen'lar ham `AppTheme.of(context)` orqali ranglarni oladi.
       builder: (context, child) => AppTheme(colors: colors, child: child ?? const SizedBox()),
+      // Uchta holat: sessiya o'qilmoqda → login → (yangi qurilma bo'lsa) yuz
+      // tekshiruvi → qobiq. `faceRequired` da token CHEKLANGAN, shuning uchun
+      // qobiqni ochish mumkin emas — har bir so'rov 401 qaytarardi.
       home: !session.ready
           ? const _Splash()
-          : (session.isAuthed ? const ShellScreen() : const LoginScreen()),
+          : !session.isAuthed
+              ? const LoginScreen()
+              : (session.faceRequired ? const FaceCheckScreen() : const ShellScreen()),
     );
   }
 }

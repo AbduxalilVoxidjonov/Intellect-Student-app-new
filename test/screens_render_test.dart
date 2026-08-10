@@ -34,7 +34,18 @@ const _ratingJson = '''
     {"rank": 2, "studentId": "x2", "fullName": "Sardor Aliyev", "className": "B2", "average": 4.6, "ball": 1200},
     {"rank": 3, "studentId": "x3", "fullName": "Bobur Rashidov", "className": "A1", "average": 4.2, "ball": 990}
   ],
-  "meSchoolRank": 12, "schoolSize": 340
+  "meSchoolRank": 12, "schoolSize": 340,
+  "groups": [
+    {
+      "groupId": "g1", "groupName": "Ingliz tili A1", "meRank": 2, "size": 4,
+      "rows": [
+        {"rank": 1, "studentId": "x1", "fullName": "Aziza Karimova", "className": "A1", "average": 4.8, "ball": 1280},
+        {"rank": 2, "studentId": "s1", "fullName": "Ali Valiyev", "className": "A1", "average": 4.5, "ball": 1150},
+        {"rank": 3, "studentId": "x3", "fullName": "Bobur Rashidov", "className": "A1", "average": 4.2, "ball": 990},
+        {"rank": 4, "studentId": "x4", "fullName": "Dilnoza Yusupova", "className": "A1", "average": 4.0, "ball": 870}
+      ]
+    }
+  ]
 }
 ''';
 

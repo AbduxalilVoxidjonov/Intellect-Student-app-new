@@ -122,6 +122,30 @@ class StudentApi {
         StudentGradingGroup.fromJson,
       );
 
+  // ---------- Davr jurnali ("Umumiy statistika" ekrani) ----------
+  /// Hafta/oy oralig'idagi jurnal: jamlanma + fanlar kesimi + HAR DARS qatori.
+  ///
+  /// [from]/[to] — "YYYY-MM-DD" (ikkalasi ham oraliqqa KIRADI).
+  /// [groupId] bo'sh yoki `null` bo'lsa query'ga UMUMAN qo'shilmaydi — server buni
+  /// "barcha guruhlar" deb tushunadi. Bo'sh satr yuborilsa server uni "shu id'li
+  /// guruh" deb o'qib, natijani bo'shatib qo'yishi mumkin edi (`grading(month:)`
+  /// bilan bir xil siyosat).
+  static Future<StudentPeriodJournal> journal({
+    required String from,
+    required String to,
+    String? groupId,
+    String? studentId,
+  }) async =>
+      _obj(
+        await ApiClient.dio.get('/student/journal', queryParameters: {
+          'from': from,
+          'to': to,
+          if (groupId != null && groupId.isNotEmpty) 'groupId': groupId,
+          ...?_sid(studentId),
+        }),
+        StudentPeriodJournal.fromJson,
+      );
+
   // ---------- Guruhlar ----------
   /// O'quvchining guruhlari — faol ham, tugagan/chiqilgan ham (`state` bilan).
   /// Manba: `StudentGroup` a'zoliklari; yozuv umuman bo'lmasa server `ClassName` bo'yicha

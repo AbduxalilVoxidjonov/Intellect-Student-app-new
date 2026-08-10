@@ -37,7 +37,13 @@ const _ratingJson = '''
   "meStudentId": "s1",
   "classRows": [{"rank": 1, "studentId": "s1", "fullName": "Ali Valiyev", "className": "Ingliz tili A1", "average": 4.2, "ball": 320}],
   "schoolRows": [{"rank": 5, "studentId": "s1", "fullName": "Ali Valiyev", "className": "Ingliz tili A1", "average": 4.2, "ball": 320}],
-  "meSchoolRank": 5, "schoolSize": 120
+  "meSchoolRank": 5, "schoolSize": 120,
+  "groups": [
+    {
+      "groupId": "g1", "groupName": "Ingliz tili A1", "meRank": 1, "size": 1,
+      "rows": [{"rank": 1, "studentId": "s1", "fullName": "Ali Valiyev", "className": "Ingliz tili A1", "average": 4.2, "ball": 320}]
+    }
+  ]
 }
 ''';
 

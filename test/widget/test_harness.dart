@@ -103,6 +103,8 @@ FakeApi installFakeApi({String fallbackBody = '{}', int fallbackStatus = 200}) {
   ApiClient.token = 'test-token';
   // 401 kelganda sessiya tugatilmasin (testda Session mock emas).
   ApiClient.onUnauthorized = null;
+  ApiClient.onFaceRequired = null;
+  ApiClient.resetUnauthorizedGuard();
   return api;
 }
 

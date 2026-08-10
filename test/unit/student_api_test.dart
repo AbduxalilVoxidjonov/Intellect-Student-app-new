@@ -40,6 +40,23 @@ const _onlineTestJson = '''
 }
 ''';
 
+const _journalJson = '''
+{
+  "from": "2026-08-03", "to": "2026-08-09", "groupId": "",
+  "groups": [{"groupId": "g1", "groupName": "Ingliz A1", "courseName": "General English", "teacherName": "Aziza"}],
+  "summary": {"held": 12, "attended": 10, "absent": 1, "late": 1, "attendancePct": 83,
+              "gradesCount": 7, "avgGrade": 4.6,
+              "homeworkDone": 5, "homeworkMissed": 1, "behaviorGood": 3, "behaviorBad": 0},
+  "subjects": [{"subjectId": "c1", "subjectName": "General English", "held": 4, "attended": 4,
+                "gradesCount": 3, "avgGrade": 4.7}],
+  "lessons": [{"date": "2026-08-05", "period": 2, "groupId": "g1", "groupName": "Ingliz A1",
+               "subjectId": "c1", "subjectName": "General English", "topic": "", "homeworkText": "",
+               "conducted": true, "present": true, "grade": 5,
+               "reasonName": null, "reasonShort": null, "isLate": false,
+               "homeworkMark": 1, "behavior": 0, "mastery": null}]
+}
+''';
+
 const _notificationsJson = '''
 {
   "unread": 2,
@@ -104,6 +121,59 @@ void main() {
 
       expect(a.last.uri.queryParameters['month'], '2026-07');
       expect(a.last.uri.queryParameters['studentId'], 's1');
+    });
+  });
+
+  group('journal — davr jurnali query parametrlari', () {
+    test('from/to har doim, groupId berilsa qo\'shiladi', () async {
+      final a = install(FakeAdapter.always(const FakeReply.json(_journalJson)));
+
+      await StudentApi.journal(from: '2026-08-03', to: '2026-08-09', groupId: 'g1', studentId: 's1');
+
+      expect(a.last.path, '/student/journal');
+      expect(a.last.uri.queryParameters['from'], '2026-08-03');
+      expect(a.last.uri.queryParameters['to'], '2026-08-09');
+      expect(a.last.uri.queryParameters['groupId'], 'g1');
+      expect(a.last.uri.queryParameters['studentId'], 's1');
+    });
+
+    test('groupId berilmasa query ga TUSHMAYDI (server "barcha guruh" deb tushunadi)', () async {
+      final a = install(FakeAdapter.always(const FakeReply.json(_journalJson)));
+
+      await StudentApi.journal(from: '2026-08-01', to: '2026-08-31');
+
+      expect(a.last.uri.queryParameters.containsKey('groupId'), isFalse);
+      expect(a.last.uri.queryParameters.containsKey('studentId'), isFalse);
+      expect(a.last.uri.queryParameters.keys.toSet(), {'from', 'to'});
+    });
+
+    test('groupId BO\'SH satr bo\'lsa ham tushmaydi', () async {
+      final a = install(FakeAdapter.always(const FakeReply.json(_journalJson)));
+
+      await StudentApi.journal(from: '2026-08-01', to: '2026-08-31', groupId: '');
+
+      expect(a.last.uri.queryParameters.containsKey('groupId'), isFalse);
+    });
+
+    test('javob modelga o\'giriladi', () async {
+      install(FakeAdapter.always(const FakeReply.json(_journalJson)));
+
+      final j = await StudentApi.journal(from: '2026-08-03', to: '2026-08-09');
+
+      expect(j.from, '2026-08-03');
+      expect(j.summary.held, 12);
+      expect(j.groups.single.groupName, 'Ingliz A1');
+      expect(j.lessons.single.grade, 5);
+      expect(j.lessons.single.mastery, isNull);
+    });
+
+    test('server obyekt o\'rniga massiv yuborsa — tushunarli Exception', () async {
+      install(FakeAdapter.always(const FakeReply.json('[]')));
+
+      await expectLater(
+        StudentApi.journal(from: '2026-08-03', to: '2026-08-09'),
+        throwsA(isA<Exception>()),
+      );
     });
   });
 

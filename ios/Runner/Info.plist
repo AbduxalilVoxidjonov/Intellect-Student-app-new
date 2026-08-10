@@ -67,7 +67,7 @@
 			<string>UIInterfaceOrientationLandscapeRight</string>
 		</array>
 		<key>NSCameraUsageDescription</key>
-		<string>Taklif va shikoyatga rasm ilova qilish uchun kameradan foydalaniladi.</string>
+		<string>Yangi qurilmadan kirganda shaxsingizni tasdiqlash uchun selfi olinadi, shuningdek taklif va shikoyatga rasm ilova qilinadi.</string>
 		<key>NSPhotoLibraryUsageDescription</key>
 		<string>Taklif va shikoyatga rasm ilova qilish uchun galereyadan rasm tanlanadi.</string>
 		<key>NSLocationWhenInUseUsageDescription</key>

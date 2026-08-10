@@ -9,9 +9,6 @@ import '../../utils/format.dart';
 import '../../widgets/ui.dart';
 import '../../config.dart';
 import '../statistics_screen.dart';
-import '../grades_screen.dart';
-import '../attendance_screen.dart';
-import '../grading_screen.dart';
 import '../ai_check_screen.dart';
 import '../finance_screen.dart';
 import '../certificates_screen.dart';
@@ -47,11 +44,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
   List<StudentGroupInfo>? _groups;
 
   // Menyu bandlari va tartibi web Profile.tsx'dagi MENU bilan aynan bir xil.
+  //
+  // ⚠️ «Baholar», «Davomat» va «Baholash» bandlari OLIB TASHLANDI — ular endi
+  // «Umumiy statistika» ekranining ichidagi tablar (hafta/oy filtri bilan).
+  // Sabab: uchala ro'yxat ham bitta savolga javob berardi ("davrda o'qish qanday
+  // ketdi"), lekin har biri BOSHQA endpointdan, davr filtrisiz kelardi va
+  // o'quvchi "shu hafta qaysi darsda nima baho oldim" ni umuman ko'ra olmasdi.
   late final List<_MenuEntry> _menu = [
     _MenuEntry(Icons.grid_view_rounded, 'Umumiy statistika', const Color(0xFF1B7A66), (_) => const StatisticsScreen()),
-    _MenuEntry(Icons.bar_chart_rounded, 'Baholar', const Color(0xFF2563EB), (_) => const GradesScreen()),
-    _MenuEntry(Icons.check_circle_rounded, 'Davomat', const Color(0xFF16A34A), (_) => const AttendanceScreen()),
-    _MenuEntry(Icons.check_rounded, 'Baholash', const Color(0xFF0D9488), (_) => const GradingScreen()),
     _MenuEntry(Icons.auto_awesome_rounded, 'AI tekshiruv', const Color(0xFF7C3AED), (_) => const AiCheckScreen()),
     _MenuEntry(Icons.account_balance_wallet_rounded, "To'lovlar", const Color(0xFF7C3AED),
         (_) => const FinanceScreen()),

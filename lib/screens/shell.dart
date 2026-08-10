@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import '../services/push.dart';
 import '../theme/app_theme.dart';
@@ -38,14 +40,6 @@ class _ShellScreenState extends State<ShellScreen> {
         _ => const ProfileScreen(),
       };
 
-  static const _tabs = [
-    (_TabDef(Icons.home_rounded, Icons.home_outlined, 'Dashboard')),
-    (_TabDef(Icons.insert_chart_rounded, Icons.insert_chart_outlined, 'Progress')),
-    (_TabDef(Icons.fact_check_rounded, Icons.fact_check_outlined, 'Test')),
-    (_TabDef(Icons.chat_bubble_rounded, Icons.chat_bubble_outline, 'Chat')),
-    (_TabDef(Icons.person_rounded, Icons.person_outline, 'Profil')),
-  ];
-
   @override
   void initState() {
     super.initState();
@@ -74,7 +68,7 @@ class _ShellScreenState extends State<ShellScreen> {
         child: IndexedStack(
           index: _index,
           children: [
-            for (int i = 0; i < _tabs.length; i++)
+            for (int i = 0; i < StudentBottomNav.tabs.length; i++)
               // `TickerMode` — ko'rinmayotgan tabda animatsiya va davriy
               // so'rovlar to'xtaydi (chat `TickerMode.of(context)` ni kuzatadi).
               TickerMode(
@@ -84,23 +78,77 @@ class _ShellScreenState extends State<ShellScreen> {
           ],
         ),
       ),
-      bottomNavigationBar: Container(
-        decoration: BoxDecoration(
-          color: c.surface,
-          border: Border(top: BorderSide(color: c.border)),
-        ),
-        child: SafeArea(
-          top: false,
+      bottomNavigationBar: StudentBottomNav(index: _index, onSelect: _select),
+    );
+  }
+}
+
+/// Tab ikonkasi va yozuvining o'lchamlari — panel balandligi hisobi bilan bir
+/// joyda tursin (biri o'zgarib, ikkinchisi eskicha qolib ketmasin).
+const double _iconSize = 24;
+const double _labelSize = 11;
+
+/// Pastki navigatsiya paneli.
+///
+/// `ShellScreen` dan AJRATILGAN, chunki uni alohida test qilish kerak: qobiqning
+/// o'zini render qilish push-xizmati va Dashboard so'rovlarini ham ishga tushiradi.
+///
+/// YOZUV SIG'MASLIGI ikki sababdan bo'lardi va ikkalasi ham shu yerda yopilgan:
+///  1. **Tor telefon.** 5 ta tab ekran kengligini teng bo'lib oladi: 320dp li
+///     telefonda bittasiga 64dp qoladi, "Dashboard" esa 11px shriftda deyarli
+///     shuncha joy egallaydi — tizim shrifti bir oz kattalashtirilsa sig'may,
+///     `Text` IKKI QATORGA o'ralardi (unda na `maxLines`, na `overflow` bor edi).
+///  2. **Qat'iy 62dp balandlik.** Yozuv ikki qatorga tushishi bilan ustun 62dp
+///     ga sig'may `RenderFlex overflowed` (sariq-qora chiziqlar) berardi.
+///
+/// Yechim: (a) yozuv masshtabi 1.3 bilan CHEKLANADI — pastki navigatsiya uchun
+/// odatiy amaliyot (Material `NavigationBar` ham shunday qiladi), aks holda
+/// tizimda 2x shrift qo'ygan foydalanuvchida panel ekranning yarmini egallardi;
+/// (b) qolgan masshtabga qarab panel balandligi O'SADI — katta shrift butunlay
+/// yo'qotilmaydi; (c) yozuv bir qatorda qoladi va joy yetmasa `FittedBox` bilan
+/// KICHRAYADI (kesilmaydi ham, o'ralmaydi ham).
+class StudentBottomNav extends StatelessWidget {
+  final int index;
+  final ValueChanged<int> onSelect;
+  const StudentBottomNav({super.key, required this.index, required this.onSelect});
+
+  static const tabs = [
+    _TabDef(Icons.home_rounded, Icons.home_outlined, 'Dashboard'),
+    _TabDef(Icons.insert_chart_rounded, Icons.insert_chart_outlined, 'Progress'),
+    _TabDef(Icons.fact_check_rounded, Icons.fact_check_outlined, 'Test'),
+    _TabDef(Icons.chat_bubble_rounded, Icons.chat_bubble_outline, 'Chat'),
+    _TabDef(Icons.person_rounded, Icons.person_outline, 'Profil'),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final c = AppTheme.of(context);
+    final scaler = MediaQuery.textScalerOf(context).clamp(maxScaleFactor: 1.3);
+    // Yozuv qatorining taxminiy balandligi (shrift × qator oralig'i).
+    final labelH = scaler.scale(_labelSize) * 1.3;
+    // 62 — avvalgi ko'rinish: standart shriftda panel AYNAN o'zgarmaydi,
+    // undan kattasi faqat shrift kattalashtirilganda kerak bo'ladi.
+    final barH = math.max(62.0, _iconSize + 3 + labelH + 18);
+
+    return Container(
+      decoration: BoxDecoration(
+        color: c.surface,
+        border: Border(top: BorderSide(color: c.border)),
+      ),
+      child: SafeArea(
+        top: false,
+        child: MediaQuery.withClampedTextScaling(
+          maxScaleFactor: 1.3,
           child: SizedBox(
-            height: 62,
+            height: barH,
             child: Row(
               children: [
-                for (int i = 0; i < _tabs.length; i++)
+                for (int i = 0; i < tabs.length; i++)
                   Expanded(
                     child: _TabItem(
-                      def: _tabs[i],
-                      active: _index == i,
-                      onTap: () => _select(i),
+                      def: tabs[i],
+                      active: index == i,
+                      onTap: () => onSelect(i),
                     ),
                   ),
               ],
@@ -132,11 +180,30 @@ class _TabItem extends StatelessWidget {
       onTap: onTap,
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(active ? def.active : def.inactive, size: 25, color: color),
+          Icon(active ? def.active : def.inactive, size: _iconSize, color: color),
           const SizedBox(height: 3),
-          Text(def.label,
-              style: TextStyle(fontSize: 11, fontWeight: active ? FontWeight.w700 : FontWeight.w500, color: color)),
+          // Yozuv HAR DOIM bitta qatorda: joy yetmasa `FittedBox` uni
+          // KICHRAYTIRADI. Tor telefonda "Dashboard" aynan shu yerda o'ralib
+          // ketib, panel balandligidan toshardi.
+          // `Padding` — qo'shni tab yozuvlari bir-biriga tegib turmasin.
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 2),
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                def.label,
+                maxLines: 1,
+                softWrap: false,
+                style: TextStyle(
+                  fontSize: _labelSize,
+                  fontWeight: active ? FontWeight.w700 : FontWeight.w500,
+                  color: color,
+                ),
+              ),
+            ),
+          ),
         ],
       ),
     );

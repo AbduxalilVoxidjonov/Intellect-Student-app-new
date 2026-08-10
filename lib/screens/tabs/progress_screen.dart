@@ -6,6 +6,7 @@ import '../../models/models.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/errors.dart';
 import '../../utils/format.dart';
+import '../../widgets/podium.dart';
 import '../../widgets/ui.dart';
 import '../lesson_screen.dart';
 
@@ -36,6 +37,10 @@ const _tabs = <(IconData, String)>[
 class _ProgressScreenState extends State<ProgressScreen> {
   int _mode = 0; // 0=Dastur, 1=Guruh, 2=Markaz
   int _sel = 0; // Dastur uchun tanlangan kurs indeksi
+
+  /// "Guruh" rejimida tanlangan guruh indeksi. O'quvchi bir necha kursda
+  /// o'qishi mumkin — server HAR BIR faol guruhni alohida qaytaradi.
+  int _gsel = 0;
 
   List<StudentCurriculum>? _courses;
   String? _curError;
@@ -130,12 +135,20 @@ class _ProgressScreenState extends State<ProgressScreen> {
                     children: [
                       Icon(_tabs[i].$1, size: 16, color: _mode == i ? Colors.white : c.muted),
                       const SizedBox(width: 6),
-                      Text(_tabs[i].$2,
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w700,
-                            color: _mode == i ? Colors.white : c.muted,
-                          )),
+                      // TUZATILDI: katta matn masshtabida ("textScale 2.0")
+                      // "Markaz" yozuvi 1/3 kenglikka sig'may, segment o'ngga
+                      // toshib ketardi. `Flexible` + ellipsis — matn qirqiladi,
+                      // layout buzilmaydi.
+                      Flexible(
+                        child: Text(_tabs[i].$2,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                              color: _mode == i ? Colors.white : c.muted,
+                            )),
+                      ),
                     ],
                   ),
                 ),
@@ -225,6 +238,12 @@ class _ProgressScreenState extends State<ProgressScreen> {
 
   // ---------------- REYTING ----------------
 
+  /// Reyting ko'rinishi — GURUH va MARKAZ uchun BITTA joyda.
+  ///
+  /// Ikkalasi ham bir xil chiziladi (o'qituvchi ilovasidagidek): tepada
+  /// "Sizning o'rningiz", so'ng TOP-3 PODIUM, ostida qolganlari jadval bilan.
+  /// Farqi faqat ma'lumot manbaida: guruhda `groups[_gsel]`, markazda
+  /// `schoolRows` (TOP 15).
   Widget _rating0(AppColors c, {required bool school}) {
     if (_ratError != null) {
       return _scrollWrap([
@@ -238,24 +257,90 @@ class _ProgressScreenState extends State<ProgressScreen> {
     final board = _rating;
     if (board == null) return _scrollWrap([const SizedBox(height: 120), const Loader()]);
 
-    final rows = school ? board.schoolRows : board.classRows;
     final meId = board.meStudentId;
+    final groups = board.groups;
+
+    // GURUH rejimida: guruh umuman yo'q bo'lsa boshqa hech narsa ko'rsatilmaydi
+    // (ilgari bo'sh `classRows` tufayli shunchaki bo'sh jadval chiqardi).
+    if (!school && groups.isEmpty) {
+      return _scrollWrap([
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: SCard(
+            child: _EmptyBlock(
+              title: "Guruh reytingi yo'q",
+              sub: "Siz hali birorta faol guruhga qo'shilmagansiz yoki guruhda "
+                  "hali ball yig'ilmagan.",
+              icon: Icons.emoji_events_rounded,
+            ),
+          ),
+        ),
+      ]);
+    }
+
+    // Tanlangan guruh (ro'yxat qisqargan bo'lsa ham indeks chegaradan chiqmaydi).
+    final gi = groups.isEmpty ? 0 : math.min(_gsel, groups.length - 1);
+    final group = school || groups.isEmpty ? null : groups[gi];
+
+    final rows = school ? board.schoolRows : group!.rows;
     RatingRow? me;
     for (final r in rows) {
       if (r.studentId == meId) { me = r; break; }
     }
-    final meRank = school ? (board.meSchoolRank ?? me?.rank ?? 0) : (me?.rank ?? 0);
-    final meTotal = school ? board.schoolSize : board.classRows.length;
+    // O'rin va "jami": markazda serverning markaz o'rni, guruhda shu guruhniki.
+    final meRank = school ? (board.meSchoolRank ?? me?.rank ?? 0) : group!.meRank;
+    final meTotal = school ? board.schoolSize : group!.size;
+
+    // TOP-3 — podium, qolgani odatdagi jadval.
+    final top3 = rows.take(3).toList();
+    final rest = rows.skip(3).toList();
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
       physics: const AlwaysScrollableScrollPhysics(),
       children: [
+        // Guruh tanlash chiplari — FAQAT bir nechta guruh bo'lsa (bittasida
+        // tanlaydigan narsa yo'q, chip faqat joy egallardi).
+        if (!school && groups.length > 1) ...[
+          SizedBox(
+            height: 34,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: groups.length,
+              separatorBuilder: (_, _) => const SizedBox(width: 8),
+              itemBuilder: (_, i) {
+                final on = i == gi;
+                return GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => setState(() => _gsel = i),
+                  child: Container(
+                    alignment: Alignment.center,
+                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                    decoration: BoxDecoration(
+                      color: on ? c.accent : c.surface,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: on ? c.accent : c.border),
+                    ),
+                    child: Text(groups[i].groupName,
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w700,
+                          color: on ? Colors.white : c.text,
+                        )),
+                  ),
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: 12),
+        ],
         if (me != null && meRank > 0) ...[
           _MeCard(me: me, rank: meRank, total: meTotal),
           const SizedBox(height: 16),
         ],
-        SectionTitle(school ? 'Markaz reytingi · TOP 15' : 'Guruh reytingi'),
+        SectionTitle(school
+            ? 'Markaz reytingi · TOP 15'
+            : (group!.groupName.isNotEmpty ? group.groupName : 'Guruh reytingi')),
         if (rows.isEmpty)
           SCard(
             child: _EmptyBlock(
@@ -264,21 +349,26 @@ class _ProgressScreenState extends State<ProgressScreen> {
               icon: Icons.emoji_events_rounded,
             ),
           )
-        else
-          SCard(
-            padding: const EdgeInsets.all(4),
-            child: Column(
-              children: [
-                for (int i = 0; i < rows.length; i++)
-                  _RankRow(
-                    row: rows[i],
-                    isMe: rows[i].studentId == meId,
-                    showClass: school,
-                    divider: rows[i].studentId != meId && i < rows.length - 1,
-                  ),
-              ],
+        else ...[
+          RatingPodium(rows: top3, meStudentId: meId, showClass: school),
+          if (rest.isNotEmpty) ...[
+            const SizedBox(height: 14),
+            SCard(
+              padding: const EdgeInsets.all(4),
+              child: Column(
+                children: [
+                  for (int i = 0; i < rest.length; i++)
+                    _RankRow(
+                      row: rest[i],
+                      isMe: rest[i].studentId == meId,
+                      showClass: school,
+                      divider: rest[i].studentId != meId && i < rest.length - 1,
+                    ),
+                ],
+              ),
             ),
-          ),
+          ],
+        ],
       ],
     );
   }

@@ -189,6 +189,77 @@ Color? medalColor(int rank) {
   return null;
 }
 
+/// Podium kartasi uchun medal gradienti: `[ochiq, to'q]`.
+///
+/// YAGONA MANBA: birinchi rang — AYNAN [medalColor], ya'ni podium va reyting
+/// jadvalidagi o'rin raqami BIR XIL rangda bo'ladi. (O'qituvchi ilovasidagi
+/// podium boshqa oltin tondan — `0xFFFBBF24` — foydalanadi; o'quvchi ilovasida
+/// esa `0xFFF5B301` allaqachon "Kurs yakuni" belgisida va jadvalda ishlatilgan,
+/// shuning uchun IKKALASINI ham o'quvchi ilovasining o'z palitrasiga
+/// birlashtirdik — aks holda bitta ekranda ikki xil oltin ko'rinardi.)
+///
+/// 1/2/3 dan boshqa o'rin uchun bronza qaytadi (podiumda faqat shu uchtasi
+/// chiziladi, lekin server tartibi buzilib kelsa ham rang yo'qolmasin).
+List<Color> medalGradient(int rank) {
+  if (rank == 2) return const [Color(0xFF9AA3B2), Color(0xFF6B7280)];
+  if (rank == 1) return const [Color(0xFFF5B301), Color(0xFFE8920A)];
+  return const [Color(0xFFCD7F32), Color(0xFF9A5B20)];
+}
+
+// ---------------------------------------------------------------------------
+// DAVR (hafta/oy) yordamchilari — "Umumiy statistika" ekranidagi filtr uchun.
+//
+// Barcha funksiyalar SANA-ONLY qiymat qaytaradi (soat 00:00) va DateTime
+// konstruktorining o'zi normalizatsiya qilishiga tayanadi: `DateTime(2026, 1, -2)`
+// → 2025-12-29, `DateTime(2026, 13, 0)` → 2026-12-31. Shu sabab oy/yil chegarasi
+// va kabisa yili uchun alohida shart YOZILMAGAN — qo'lda hisoblasak aynan
+// o'sha joylarda xato chiqardi.
+// ---------------------------------------------------------------------------
+
+/// Hafta boshi — DUSHANBA (`weekdaysUz[0]` ham Dushanba).
+/// `DateTime.weekday`: Dushanba=1 … Yakshanba=7, shuning uchun `weekday - 1` kun orqaga.
+DateTime weekStart(DateTime d) => DateTime(d.year, d.month, d.day - (d.weekday - 1));
+
+/// Hafta oxiri — YAKSHANBA (hafta boshidan +6 kun).
+DateTime weekEnd(DateTime d) {
+  final s = weekStart(d);
+  return DateTime(s.year, s.month, s.day + 6);
+}
+
+/// Oy boshi va oxiri: `(1-sana, oxirgi sana)`.
+/// Oxirgi kun — "keyingi oyning 0-kuni": fevral 28/29 va dekabr→yanvar
+/// o'tishi avtomatik to'g'ri chiqadi.
+(DateTime, DateTime) monthBounds(DateTime d) =>
+    (DateTime(d.year, d.month, 1), DateTime(d.year, d.month + 1, 0));
+
+String _pad2(int n) => n.toString().padLeft(2, '0');
+
+/// Server kutadigan sana formati — "YYYY-MM-DD" (MAHALLIY sana bo'yicha).
+/// `toIso8601String()` ISHLATILMAYDI: u UTC'ga o'girilganda kunni bir kunga
+/// surib yuborishi mumkin (kechqurungi sana ertangi kun bo'lib ketardi).
+String isoDate(DateTime d) => '${d.year.toString().padLeft(4, '0')}-${_pad2(d.month)}-${_pad2(d.day)}';
+
+/// Davr sarlavhasi: bir oy ichida "3–9 avgust", oylar boshqa bo'lsa
+/// "28 iyul – 3 avgust", yillar boshqa bo'lsa yil bilan
+/// "29 dekabr 2025 – 4 yanvar 2026".
+///
+/// Sanalar teskari kelsa ALMASHTIRILADI — sarlavha har doim o'sish tartibida
+/// o'qiladi (ekran "9–3 avgust" deb ko'rsatib qo'ymasin).
+String fmtRange(DateTime a, DateTime b) {
+  final from = a.isAfter(b) ? b : a;
+  final to = a.isAfter(b) ? a : b;
+  // Kichik harfli oy nomlari (`todayLine` bilan bir xil ko'rinish).
+  final fromMonth = _moUz[from.month - 1];
+  final toMonth = _moUz[to.month - 1];
+  if (from.year != to.year) {
+    return '${from.day} $fromMonth ${from.year} – ${to.day} $toMonth ${to.year}';
+  }
+  if (from.month != to.month) return '${from.day} $fromMonth – ${to.day} $toMonth';
+  // Bitta oy ichida oy nomi bir marta yoziladi: "3–9 avgust".
+  if (from.day == to.day) return '${from.day} $fromMonth';
+  return '${from.day}–${to.day} $fromMonth';
+}
+
 /// Guruh dars kunlari (0=Dushanba…6=Yakshanba) → "Du, Chor, Ju".
 /// Noto'g'ri indekslar e'tiborsiz qoldiriladi.
 String fmtDays(List<int> days) => days
