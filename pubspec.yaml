@@ -69,7 +69,7 @@ dependencies:
   # ⚠️ iOS: Podfile'ga PERMISSION_CAMERA=1 makrosi qo'shilishi kerak (aks holda
   #    ishlatilmagan ruxsat kodlari ham kompilyatsiya qilinadi) — hozircha bu
   #    repoda iOS Podfile umuman yo'q, birinchi `pod install` da qo'shiladi.
-  permission_handler: ^13.0.0
+  permission_handler: ^12.0.3
 
 dev_dependencies:
   flutter_test:
