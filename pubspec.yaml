@@ -1,5 +1,5 @@
 name: student
-description: "A new Flutter project."
+description: "Intellect Student — Intellect Kokand o'quv markazi o'quvchilari uchun ilova: davomat, baholar, onlayn testlar, to'lovlar, shartnoma va sertifikatlar."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
@@ -16,7 +16,10 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.0.0+1
+# DIQQAT: har bir Play Console'ga yuklanishda build raqami (+N) OSHISHI SHART —
+# bir xil versionCode ikkinchi marta qabul qilinmaydi. Versiya nomi (1.0.0)
+# o'zgarsa, lib/config.dart dagi kAppVersion ham shunga MOSLANSIN (ekranda ko'rinadi).
+version: 1.0.0+2
 
 environment:
   sdk: ^3.12.2

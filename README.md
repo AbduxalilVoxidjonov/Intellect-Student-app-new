@@ -1,17 +1,48 @@
-# student
+# Intellect Student
 
-A new Flutter project.
+Intellect Kokand o'quv markazi **o'quvchilari** uchun mobil ilova (Flutter).
+Markazning CRM tizimiga (`https://crm.intellectschool.uz`) ulanadi.
 
-## Getting Started
+O'qituvchilar uchun alohida ilova: `../teacher`.
 
-This project is a starting point for a Flutter application.
+## Ishga tushirish
 
-A few resources to get you started if this is your first Flutter project:
+```powershell
+flutter pub get
+flutter run
+```
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+API manzili — `lib/config.dart` (`kApiBaseUrl`). Lokal server bilan sinash uchun
+o'sha fayldagi izohga qarang.
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+## Tekshirish
+
+```powershell
+flutter analyze
+flutter test
+```
+
+## Play Console'ga chiqarish
+
+```powershell
+# pubspec.yaml dagi versiyani oshiring, so'ng:
+powershell -ExecutionPolicy Bypass -File tool\release.ps1
+```
+
+Natija `release/` papkasida versiya nomi bilan paydo bo'ladi (`.aab` — Play uchun,
+`.apk` — telefonda sinash uchun).
+
+To'liq qo'llanma: **[PLAY-STORE.md](PLAY-STORE.md)** — ruxsatlar, Data safety
+javoblari, imzo kaliti va tekshiruv ro'yxati.
+Do'kon sahifasi matnlari va grafikalar: [`store/`](store/).
+
+## Loyiha tuzilishi
+
+| Papka | Nima |
+|---|---|
+| `lib/api` | CRM API mijozi (`dio`) |
+| `lib/screens` | Ekranlar; `screens/tabs` — pastki navigatsiya bo'limlari |
+| `lib/services` | Sessiya (`session.dart`), push bildirishnoma (`push.dart`) |
+| `lib/theme`, `lib/widgets` | Ranglar va umumiy UI qismlari |
+| `test/` | Birlik va widget testlari |
+| `tool/` | Chiqarish (release) va do'kon grafikalari skriptlari |

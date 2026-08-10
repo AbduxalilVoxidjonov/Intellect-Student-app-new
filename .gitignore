@@ -43,3 +43,7 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Play Console'ga yuklanadigan versiyalangan artefaktlar (tool/release.ps1 yaratadi).
+# 50+ MB — repozitoriyga tushmasin; kerak bo'lsa qayta yig'iladi.
+/release/

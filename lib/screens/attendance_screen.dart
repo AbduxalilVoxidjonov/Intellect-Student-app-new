@@ -7,18 +7,6 @@ import '../utils/format.dart';
 import '../api/student_api.dart';
 import '../models/models.dart';
 
-/// Joriy chorakni serverdan (`/student/meta`) oladi.
-/// Meta kelmasa yoki qiymat yaroqsiz bo'lsa — 1-chorak.
-/// DIQQAT: chorak QATTIQ KODLANMAYDI — aks holda 2-chorakda ekran bo'sh ko'rinardi.
-Future<int> fetchCurrentQuarter() async {
-  try {
-    final q = (await StudentApi.meta()).currentQuarter;
-    return q >= 1 && q <= 4 ? q : 1;
-  } catch (_) {
-    return 1;
-  }
-}
-
 class AttendanceScreen extends StatefulWidget {
   const AttendanceScreen({super.key});
   @override
@@ -29,9 +17,6 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
   StudentAttendanceFull? _data;
   String? _error;
 
-  /// Ko'rsatilayotgan chorak — `null` hali aniqlanmagan (meta yuklanmoqda).
-  int? _quarter;
-
   @override
   void initState() {
     super.initState();
@@ -41,14 +26,9 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
   Future<void> _load() async {
     setState(() => _error = null);
     try {
-      // Birinchi yuklashda joriy chorak serverdan olinadi, keyin tanlangani ishlatiladi.
-      final q = _quarter ?? await fetchCurrentQuarter();
-      final d = await StudentApi.attendance(quarter: q);
+      final d = await StudentApi.attendance();
       if (!mounted) return;
-      setState(() {
-        _quarter = q;
-        _data = d;
-      });
+      setState(() => _data = d);
     } catch (e) {
       if (!mounted) return;
       // Xom istisno matni emas — o'zbekcha tushunarli xabar.
@@ -56,30 +36,9 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     }
   }
 
-  /// Chorak almashtirilganda — davomat shu chorak uchun qaytadan so'raladi.
-  void _setQuarter(int q) {
-    if (q == _quarter) return;
-    setState(() {
-      _quarter = q;
-      _data = null;
-    });
-    _load();
-  }
-
   @override
   Widget build(BuildContext context) {
-    return SubScaffold(title: 'Davomat', child: _body(context));
-  }
-
-  Widget _body(BuildContext context) {
-    final c = AppTheme.of(context);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        if (_quarter != null && _error == null) QuarterBar(value: _quarter!, onChanged: _setQuarter),
-        Expanded(child: _content(c)),
-      ],
-    );
+    return SubScaffold(title: 'Davomat', child: _content(AppTheme.of(context)));
   }
 
   Widget _content(AppColors c) {
@@ -89,8 +48,8 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     final data = _data;
     if (data == null) return const Loader();
 
-    // Xulosa kalitlari — chorak raqami (satr ko'rinishida).
-    final q = '${_quarter ?? 1}';
+    // Xulosa kalitlari — Quarter ustuni (serverda DOIM 1; markazda chorak tizimi yo'q).
+    const q = '1';
     final a = data.summary;
     final stats = [
       (label: 'Dars qoldirildi', val: a.missedLessons[q] ?? 0, icon: Icons.warning_amber_rounded, color: c.red),
@@ -224,64 +183,6 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
             ),
           ),
           if (r.reasonName.isNotEmpty) SChip(r.reasonName, color: rc),
-        ],
-      ),
-    );
-  }
-}
-
-/// Chorak tanlagich (1–4) — «Davomat» va «Baholar» ekranlari uchun umumiy.
-/// Progress tabidagi segment tugmalari uslubida, faqat ixchamroq.
-class QuarterBar extends StatelessWidget {
-  final int value;
-  final ValueChanged<int> onChanged;
-  const QuarterBar({super.key, required this.value, required this.onChanged});
-
-  @override
-  Widget build(BuildContext context) {
-    final c = AppTheme.of(context);
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
-      child: Row(
-        children: [
-          Text('Chorak',
-              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: c.muted)),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Container(
-              height: 36,
-              padding: const EdgeInsets.all(3),
-              decoration: BoxDecoration(
-                color: c.surface,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: c.border),
-              ),
-              child: Row(
-                children: [
-                  for (var q = 1; q <= 4; q++)
-                    Expanded(
-                      child: GestureDetector(
-                        behavior: HitTestBehavior.opaque,
-                        onTap: () => onChanged(q),
-                        child: Container(
-                          alignment: Alignment.center,
-                          decoration: BoxDecoration(
-                            color: value == q ? c.accent : Colors.transparent,
-                            borderRadius: BorderRadius.circular(9),
-                          ),
-                          child: Text('$q',
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w700,
-                                color: value == q ? Colors.white : c.muted,
-                              )),
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          ),
         ],
       ),
     );

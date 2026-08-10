@@ -8,6 +8,8 @@ const String kApiBaseUrl = 'https://crm.intellectschool.uz/api';
 /// Fayl/rasm manzillari nisbiy ("/uploads/..") kelsa shu bazaga ulanadi.
 const String kFileBaseUrl = 'https://crm.intellectschool.uz';
 
+/// Sozlamalar/profil ekranining pastida ko'rinadi.
+/// pubspec.yaml dagi `version:` ning nom qismi bilan BIR XIL turishi kerak.
 const String kAppVersion = 'v1.0.0';
 
 /// Markaz nomi — kirish ekrani va "ilova haqida" qatorlarida ko'rsatiladi.

@@ -5,10 +5,29 @@
     <!-- Uy joylashuvini aniqlash (geolocator) -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+
+    <!-- Joylashuv ruxsati Play'da GPS uskunasini AVTOMAT "majburiy" deb belgilaydi va
+         GPS'siz qurilmalar (ba'zi planshet/Chromebook) do'konda ilovani ko'rmay qoladi.
+         Ilova GPS'siz ham to'liq ishlaydi (faqat «Uy joylashuvi» tugmasi ishlamaydi),
+         shuning uchun uskuna talabini ATAYIN ixtiyoriy qilamiz. -->
+    <uses-feature android:name="android.hardware.location" android:required="false"/>
+    <uses-feature android:name="android.hardware.location.gps" android:required="false"/>
+    <uses-feature android:name="android.hardware.location.network" android:required="false"/>
+    <!-- image_picker kamerani ochishi mumkin, lekin kamerasiz qurilmada galereya qoladi. -->
+    <uses-feature android:name="android.hardware.camera" android:required="false"/>
+    <uses-feature android:name="android.hardware.camera.any" android:required="false"/>
+
+    <!-- allowBackup=false: ilova sessiya TOKENINI SharedPreferences'da saqlaydi, Google
+         Drive'ga avtomatik zaxira (Auto Backup) yoqilgan bo'lsa token bulutga chiqib
+         ketardi. Android 12+ da allowBackup faqat BULUT zaxirasini o'chiradi, qurilmadan
+         -qurilmaga ko'chirish esa @xml/data_extraction_rules orqali cheklanadi. -->
     <application
         android:label="Intellect Student"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:allowBackup="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="false">
         <activity
             android:name=".MainActivity"
             android:exported="true"
