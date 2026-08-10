@@ -152,13 +152,16 @@ class FaceThresholds {
   /// Server javob bermasa ishlatiladigan qiymatlar.
   ///
   /// Kalibrlash: 160px kulrang yuz kesimida o'lchangan (`grayRegion` bilan) —
-  /// tiniq portret ~530, 5×5 xiralik ~96, 9×9 xiralik ~28 berdi, shuning uchun
+  /// tiniq portret ~530, 5x5 xiralik ~96, 9x9 xiralik ~28 berdi, shuning uchun
   /// chegara 40 (kuchli xiralikni to'sadi, yengil xiralikni o'tkazadi).
+  ///
+  /// minFaceRatio 0.15 → 0.12: kamera doirasi kattaytirilgandan keyin
+  /// (260–340px) bir xil masofadagi yuz nisbatan kichikroq ko'rinadi.
   static const FaceThresholds fallback = FaceThresholds(
     minSharpness: 40,
     minBrightness: 55,
     maxBrightness: 215,
-    minFaceRatio: 0.15,
+    minFaceRatio: 0.12,
     maxYaw: 25,
     maxRoll: 20,
   );

@@ -453,7 +453,15 @@ class _FaceCheckScreenState extends State<FaceCheckScreen> with WidgetsBindingOb
     // Masofa harakatlari SERVERDA aynan shu kadrning `faceRatio` iga nisbatan
     // qayta o'lchanadi — mos kelmasa yubormaymiz (qarang `Liveness.finalFrameOk`).
     if (!Liveness.finalFrameOk(_steps, cap.quality.faceRatio)) {
-      _set(() => _hint = 'Telefonni odatdagi masofada ushlang');
+      // Qaysi harakat bajarilganiga qarab aniqroq ko'rsatma.
+      final hasCloser = _steps.any((s) => s.action == Liveness.moveCloser);
+      final hasBack = _steps.any((s) => s.action == Liveness.moveBack);
+      final msg = hasCloser
+          ? 'Telefonni biroz uzoqlashtiring — dastlabki masofaga qayting'
+          : hasBack
+              ? 'Telefonni biroz yaqinlashtiring — dastlabki masofaga qayting'
+              : 'Telefonni dastlabki masofada ushlang';
+      _set(() => _hint = msg);
       return;
     }
     _running = false;

@@ -56,9 +56,13 @@ class Liveness {
   /// Ikki kadr bir xil emas (foydalanuvchi biroz qimirlaydi), shuning uchun
   /// zaxira qoldiriladi — aks holda ekranda "bajarildi" deb turgan harakat
   /// serverda rad etilib, foydalanuvchi sababini tushunmasdi.
+  ///
+  /// 1.45 → 1.30: kichik ekranli telefonlarda yuz doiraning katta qismini
+  /// egallaydi, shuning uchun baseline allaqachon yuqori bo'lib 45% ko'payish
+  /// jismonan imkonsiz bo'lardi. 1.30 server chegarasi 1.25 dan hali 4% yuqori.
   static const double minTurnDegrees = 18;
-  static const double closerFactor = 1.45;
-  static const double backFactor = 0.68;
+  static const double closerFactor = 1.30;
+  static const double backFactor = 0.75;
 
   /// Bir harakat uchun eng qisqa/eng uzun vaqt (server `ms` ni shu oraliqda
   /// kutadi: `300 <= ms <= 20000`).
