@@ -64,6 +64,30 @@ class Liveness {
   static const double closerFactor = 1.30;
   static const double backFactor = 0.75;
 
+  /// BOSHLANG'ICH kadrda ruxsat etilgan ENG KATTA `faceRatio`.
+  ///
+  /// ⚠️ BUSIZ «yaqinlashing» JISMONAN IMKONSIZ bo'lib qolardi. Boshlang'ich
+  /// nisbat tekislash bosqichidagi BIRINCHI yaxshi kadrdan olinadi — ya'ni
+  /// telefonni yuziga yaqin tutgan odamda u 0.6 ham bo'lishi mumkin. Keyin
+  /// [closerFactor] 0.6 × 1.30 = 0.78 ni talab qiladi: yuz kadr kengligining
+  /// 78% ini egallashi kerak, bunda yuz chekkalari kesiladi, oldingi kamera
+  /// esa fokusdan chiqadi — detektor umuman topmay qo'yadi. Foydalanuvchi shu
+  /// bosqichda ABADIY qolib ketardi (vaqt tugashi bosqichni tugatmaydi, faqat
+  /// taymerni qayta boshlaydi) va ilovadan chiqishdan boshqa yo'l qolmasdi.
+  ///
+  /// 0.45 → nishon 0.585: yaqinlashib erishsa bo'ladigan qiymat. Undan
+  /// kattaroq boshlang'ichda «biroz uzoqlashtiring» deymiz — bu ko'rsatma,
+  /// «yaqinlashing» dan farqli o'laroq, HAR DOIM bajarilishi mumkin.
+  ///
+  /// ⚠️ Bu chegara XAVFSIZLIKKA ta'sir qilmaydi: server masofani mijoz
+  /// boshlang'ichiga emas, YAKUNIY selfiga nisbatan qayta o'lchaydi
+  /// ([serverAccepts]) — bu yerdagi qiymat faqat ekrandagi oqim uchun.
+  static const double maxBaselineFaceRatio = 0.45;
+
+  /// Shu kadrni boshlang'ich masofa sifatida olsa bo'ladimi.
+  static bool baselineOk(double faceRatio) =>
+      faceRatio.isFinite && faceRatio > 0 && faceRatio <= maxBaselineFaceRatio;
+
   /// Bir harakat uchun eng qisqa/eng uzun vaqt (server `ms` ni shu oraliqda
   /// kutadi: `300 <= ms <= 20000`).
   static const int minActionMs = 300;

@@ -89,6 +89,12 @@ enum _Phase {
 /// baribir serverda (kosinus) qabul qilinadi. Selfi chegaralari bu yerga
 /// qo'llansa, normal profil rasmi "sifatsiz" deb rad etilib, har bir o'quvchi
 /// administrator tasdig'ini kutib qolardi.
+/// Tekislash bosqichida telefon JUDA yaqin tutilgan — `Liveness.baselineOk`.
+///
+/// ⚠️ Bu `FaceReasons` ga QO'SHILMAYDI: u yerdagi matnlar serverdagi ro'yxat
+/// bilan bir xil bo'lishi shart, bu esa faqat shu ekranning oqim ko'rsatmasi.
+const String _tooCloseHint = 'Telefonni biroz uzoqlashtiring';
+
 const FaceThresholds kProfilePhotoThresholds = FaceThresholds(
   minSharpness: 15,
   minBrightness: 30,
@@ -244,15 +250,18 @@ class _FaceCheckScreenState extends State<FaceCheckScreen> with WidgetsBindingOb
   }
 
   /// Boshidan: yuzni ramkaga tekislash bosqichi.
-  void _beginAim() {
+  ///
+  /// [hint] — nima uchun qaytadan boshlanayotgani (masalan nonce eskirgani).
+  void _beginAim({String? hint}) {
     _steps.clear();
     _stepIndex = 0;
     _challenge = null;
     _nonceUntil = null;
+    _baseline = 0;
     _refMissing = false;
     _set(() {
       _phase = _Phase.aim;
-      _hint = null;
+      _hint = hint;
       _error = null;
       _result = null;
     });
@@ -316,7 +325,17 @@ class _FaceCheckScreenState extends State<FaceCheckScreen> with WidgetsBindingOb
       return;
     }
     // Masofa harakatlari shu kadrga nisbatan o'lchanadi.
-    _baseline = res.capture!.quality.faceRatio;
+    final ratio = res.capture!.quality.faceRatio;
+    // ⚠️ JUDA YAQIN turgan odamdan boshlansa «yaqinlashing» harakati jismonan
+    // imkonsiz bo'lib qoladi (qarang `Liveness.maxBaselineFaceRatio`) va
+    // foydalanuvchi o'sha bosqichda qotib qolardi. Shuning uchun topshiriqni
+    // SO'RAMASDAN OLDIN odatdagi masofaga qaytarishni so'raymiz — bu ko'rsatma
+    // har doim bajarilishi mumkin.
+    if (!Liveness.baselineOk(ratio)) {
+      _set(() => _hint = _tooCloseHint);
+      return;
+    }
+    _baseline = ratio;
     _set(() => _hint = null);
     await _requestChallenge();
   }
@@ -389,10 +408,15 @@ class _FaceCheckScreenState extends State<FaceCheckScreen> with WidgetsBindingOb
 
     // Nonce muddati — o'tib ketsa yangisini so'raymiz (eskisi bilan yuborilgan
     // javobni server baribir rad etardi).
+    //
+    // ⚠️ To'g'ridan-to'g'ri `_requestChallenge()` EMAS, TEKISLASHDAN: bu yerga
+    // yetganda foydalanuvchi allaqachon harakat qilib bo'lgan, ya'ni eski
+    // `_baseline` u turgan masofani BILDIRMAYDI. Eskisi bilan davom etilsa
+    // yangi «yaqinlashing» hech qimirlamasdan «bajarildi» bo'lib qolishi ham
+    // (odam allaqachon yaqin turibdi), umuman bajarib bo'lmasligi ham mumkin.
     final until = _nonceUntil;
     if (until != null && _now().isAfter(until)) {
-      _set(() => _hint = "Vaqt tugadi — qaytadan boshlaymiz");
-      unawaited(_requestChallenge());
+      _beginAim(hint: "Vaqt tugadi — qaytadan boshlaymiz");
       return;
     }
 
@@ -411,6 +435,12 @@ class _FaceCheckScreenState extends State<FaceCheckScreen> with WidgetsBindingOb
     final elapsed = _now().difference(started).inMilliseconds;
 
     // Juda uzoq — server 20 soniyadan katta `ms` ni qabul qilmaydi.
+    //
+    // ⚠️ Bu bosqichni TUGATMAYDI, faqat taymerni qayta boshlaydi. Abadiy
+    // qolib ketishdan ikki narsa saqlaydi: (1) har bir harakat jismonan
+    // bajarilishi mumkin (`Liveness.maxBaselineFaceRatio` — boshlang'ich
+    // masofa darvozasi), (2) nonce muddati tugagach yuqoridagi shart
+    // tekshiruvni boshidan boshlaydi.
     if (elapsed > Liveness.maxActionMs) {
       _stepStart = _now();
       _set(() => _hint = "Ulgurmadingiz — qaytadan bajaring");
@@ -445,6 +475,16 @@ class _FaceCheckScreenState extends State<FaceCheckScreen> with WidgetsBindingOb
 
   /// 3-bosqich: yakuniy selfi.
   Future<void> _onShotFrame(FaceResult res) async {
+    // ⚠️ Nonce shu bosqichda ham eskiradi: foydalanuvchi «dastlabki masofaga
+    // qayting» ko'rsatmasi bilan bir necha soniya ovora bo'lishi mumkin.
+    // Eskirgan nonce bilan yuborilgan selfini server RAD etadi va bu
+    // foydalanuvchining SOATLIK urinishlaridan birini yeb ketardi — shuning
+    // uchun yubormasdan, boshidan boshlaymiz.
+    final until = _nonceUntil;
+    if (_challenge != null && until != null && _now().isAfter(until)) {
+      _beginAim(hint: "Vaqt tugadi — qaytadan boshlaymiz");
+      return;
+    }
     if (!res.ok) {
       _set(() => _hint = res.reason);
       return;

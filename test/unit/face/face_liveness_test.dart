@@ -44,7 +44,9 @@ void main() {
 
     test('masofa — boshlang\'ich nisbatga qarab', () {
       expect(Liveness.done(Liveness.moveCloser, 0.45, 0.3), isTrue); // 1.5x
-      expect(Liveness.done(Liveness.moveCloser, 0.40, 0.3), isFalse); // 1.33x — server o'tkazardi, biz ZAXIRA qoldiramiz
+      // 1.27x — server (1.25) o'tkazardi, mijoz (1.30) esa ZAXIRA qoldiradi.
+      expect(Liveness.done(Liveness.moveCloser, 0.38, 0.3), isFalse);
+      expect(Liveness.serverAccepts(Liveness.moveCloser, 0.38, 0.3), isTrue);
       expect(Liveness.done(Liveness.moveBack, 0.19, 0.3), isTrue); // 0.63x
       expect(Liveness.done(Liveness.moveBack, 0.25, 0.3), isFalse);
     });
@@ -61,6 +63,24 @@ void main() {
 
     test('notanish harakat — bajarilgan deb belgilanmaydi', () {
       expect(Liveness.done('blink', -90, 0.3), isFalse);
+    });
+
+    test('boshlang\'ich JUDA yaqin bo\'lsa qabul qilinmaydi', () {
+      expect(Liveness.baselineOk(0.30), isTrue);
+      expect(Liveness.baselineOk(Liveness.maxBaselineFaceRatio), isTrue);
+      // 0.60 × 1.30 = 0.78 — yuz kadr kengligining 78% i, jismonan imkonsiz.
+      expect(Liveness.baselineOk(0.60), isFalse);
+      expect(Liveness.baselineOk(0), isFalse);
+      expect(Liveness.baselineOk(double.nan), isFalse);
+    });
+
+    test('ruxsat etilgan boshlang\'ichda «yaqinlashish» ERISHSA bo\'ladi', () {
+      // Chegaradagi eng yomon holat ham detektor topa oladigan oraliqda qolsin:
+      // aks holda foydalanuvchi shu bosqichda qotib qolardi.
+      final target = Liveness.maxBaselineFaceRatio * Liveness.closerFactor;
+      expect(target, lessThan(0.7));
+      expect(Liveness.done(Liveness.moveCloser, target, Liveness.maxBaselineFaceRatio),
+          isTrue);
     });
 
     test('mijoz chegarasi serverdan QATTIQROQ', () {

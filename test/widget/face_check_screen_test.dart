@@ -363,6 +363,86 @@ void main() {
   });
 
   // -------------------------------------------------------------------------
+  testWidgets('tekislashda JUDA yaqin — topshiriq SO\'RALMAYDI', (tester) async {
+    final api = installFakeApi();
+    api.on('/student/face/status', _statusOk);
+    api.on('/student/face/challenge', _challengeJson());
+    final session = await _faceSession(tester, api);
+
+    // faceRatio 0.6 — bundan boshlansa «yaqinlashing» 0.78 ni talab qilardi,
+    // ya'ni JISMONAN imkonsiz bo'lardi va foydalanuvchi harakat bosqichida
+    // abadiy qolib ketardi.
+    await tester.pumpWidget(_screen(
+      engine: _ScriptEngine(frames: (_) => _ok(ratio: 0.6)),
+      camera: FakeFaceCamera(),
+      session: session,
+    ));
+    await settle(tester, frames: 15);
+    expectNoRealErrors(tester);
+
+    expect(find.text('Telefonni biroz uzoqlashtiring'), findsOneWidget);
+    expect(find.text('Yuzingizni ramkaga joylashtiring'), findsOneWidget);
+    expect(api.requestsFor('/student/face/challenge'), isEmpty,
+        reason: 'bajarib bo\'lmaydigan topshiriq so\'ralmasin');
+  });
+
+  // -------------------------------------------------------------------------
+  testWidgets('nonce eskirsa — boshlang\'ich masofa QAYTA olinadi', (tester) async {
+    final api = installFakeApi();
+    api.on('/student/face/status', _statusOk);
+    api.on('/student/face/challenge', _challengeJson(ttl: 10));
+    final session = await _faceSession(tester, api);
+
+    // 0-kadr tekislashdan o'tadi (boshlang'ich 0.30), keyingilari esa faqat
+    // O'LCHOV beradi — harakat hech qachon bajarilmaydi va nonce eskiradi.
+    final engine = _ScriptEngine(
+      frames: (i) => i == 0 ? _ok(ratio: 0.3) : _measured(FaceReasons.dark, ratio: 0.3),
+    );
+
+    await tester.pumpWidget(
+        _screen(engine: engine, camera: FakeFaceCamera(), session: session));
+    await settle(tester, frames: 30);
+    expectNoRealErrors(tester);
+
+    // ⚠️ ASOSIY SHART: eskirgandan keyin TO'G'RIDAN-TO'G'RI yangi topshiriq
+    // so'ralmaydi — avval tekislashga qaytiladi, chunki foydalanuvchi harakat
+    // qilib bo'lgan va eski boshlang'ich masofa endi u turgan joyni
+    // bildirmaydi (u bilan davom etilsa «yaqinlashing» hech qimirlamasdan
+    // «bajarildi» bo'lib qolishi mumkin edi).
+    expect(find.text('Yuzingizni ramkaga joylashtiring'), findsOneWidget);
+    expect(find.text(FaceReasons.dark), findsOneWidget);
+    expect(api.requestsFor('/student/face/challenge'), hasLength(1));
+    expect(api.requestsFor('/student/face/verify'), isEmpty);
+  });
+
+  // -------------------------------------------------------------------------
+  testWidgets('yakuniy kadr bosqichida nonce eskirsa — urinish sarflanmaydi',
+      (tester) async {
+    final api = installFakeApi();
+    api.on('/student/face/status', _statusOk);
+    api.on('/student/face/challenge', _challengeJson(actions: ['move_closer'], ttl: 10));
+    final session = await _faceSession(tester, api);
+
+    // 0.30 dan 0.50 ga yaqinlashdi (1.67x — harakat bajarildi), lekin dastlabki
+    // masofaga QAYTMADI: server 0.50 ni 0.50 × 1.25 bilan solishtirib rad
+    // etardi, ya'ni yuborish soatlik urinishlardan birini bekorga yeb ketardi.
+    final engine = _ScriptEngine(
+      frames: (i) => i == 0 ? _ok(ratio: 0.3) : _ok(ratio: 0.5),
+    );
+
+    await tester.pumpWidget(
+        _screen(engine: engine, camera: FakeFaceCamera(), session: session));
+    await settle(tester, frames: 30);
+    expectNoRealErrors(tester);
+
+    expect(api.requestsFor('/student/face/verify'), isEmpty,
+        reason: 'server baribir rad etardigan selfi yuborilmasin');
+    // Nonce eskirgach boshidan boshlanadi (0.50 — tekislash uchun juda yaqin).
+    expect(find.text('Yuzingizni ramkaga joylashtiring'), findsOneWidget);
+    expect(find.text('Telefonni biroz uzoqlashtiring'), findsOneWidget);
+  });
+
+  // -------------------------------------------------------------------------
   testWidgets('rad etildi — sabab va qolgan urinishlar ko\'rinadi', (tester) async {
     final api = installFakeApi();
     api.on('/student/face/status', _statusOk);
@@ -618,6 +698,11 @@ void main() {
     ));
     await settle(tester, frames: 8);
 
+    // ⚠️ Kamera doirasi (340px) + karta test oynasida (800×600) tugmani pastga
+    // surib yuboradi — ekranda u SCROLL bilan ochiladi, testda esa `tap` nishonga
+    // tegmay ketardi. Haqiqiy telefonda muammo yo'q: ro'yxat baribir aylanadi.
+    await tester.ensureVisible(find.text('Chiqish'));
+    await tester.pump();
     await tester.tap(find.text('Chiqish'));
     await settle(tester, frames: 5);
     expectNoRealErrors(tester);
